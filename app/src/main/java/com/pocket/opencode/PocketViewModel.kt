@@ -46,6 +46,11 @@ class PocketViewModel(application: Application) : AndroidViewModel(application) 
     var projectLoaded by mutableStateOf(false)
     var activeSessions by mutableStateOf<Set<String>>(emptySet())
 
+    var serverStatus by mutableStateOf(EmbeddedServer.status.value)
+    var serverLog by mutableStateOf<List<String>>(emptyList())
+
+    val isEmbedded: Boolean get() = settings.mode == ServerMode.EMBEDDED
+
     var sessionId by mutableStateOf(settings.sessionId)
     var sessionTitle by mutableStateOf(settings.sessionTitle)
     var sessionDirectory by mutableStateOf("")
@@ -73,6 +78,7 @@ class PocketViewModel(application: Application) : AndroidViewModel(application) 
     private var refreshJob: Job? = null
     private var cacheJob: Job? = null
     private var settingsJob: Job? = null
+    private var embeddedKey: String? = null
     private val shellJobs = mutableMapOf<String, Job>()
     private val pendingShells = mutableMapOf<String, Job>()
     private val shellStatus = mutableMapOf<String, Pair<String, Int?>>()
@@ -123,7 +129,92 @@ class PocketViewModel(application: Application) : AndroidViewModel(application) 
                 if (sessionId == saved && messages.isEmpty()) messages = cached
             }
         }
-        if (settings.baseUrl.isNotBlank()) connect()
+        viewModelScope.launch {
+            EmbeddedServer.log.collect { serverLog = it }
+        }
+        viewModelScope.launch {
+            EmbeddedServer.status.collect { onEmbeddedStatus(it) }
+        }
+        if (settings.mode == ServerMode.EXTERNAL) {
+            if (settings.baseUrl.isNotBlank()) connect()
+        }
+    }
+
+    private fun onEmbeddedStatus(status: EmbeddedStatus) {
+        serverStatus = status
+        if (settings.mode != ServerMode.EMBEDDED) return
+        when (status.state) {
+            EmbeddedState.RUNNING -> {
+                val key = status.url + "|" + status.password
+                if (key != embeddedKey) {
+                    embeddedKey = key
+                    baseUrl = status.url
+                    password = status.password
+                    connect()
+                }
+            }
+
+            EmbeddedState.STARTING -> {
+                embeddedKey = null
+                connectionJob?.cancel()
+                this.status = ConnState.CONNECTING
+                statusDetail = "Запускаю встроенный OpenCode…"
+            }
+
+            EmbeddedState.ERROR -> {
+                embeddedKey = null
+                connectionJob?.cancel()
+                this.status = ConnState.ERROR
+                statusDetail = status.error.ifBlank { "Встроенный сервер не запустился" }
+            }
+
+            EmbeddedState.STOPPED -> {
+                embeddedKey = null
+                connectionJob?.cancel()
+                this.status = ConnState.IDLE
+                statusDetail = "Встроенный сервер остановлен"
+            }
+        }
+    }
+
+    fun setMode(mode: ServerMode) {
+        if (settings.modeWasSet && settings.mode == mode) return
+        settings.mode = mode
+        if (mode == ServerMode.EMBEDDED) {
+            connectionJob?.cancel()
+            status = ConnState.CONNECTING
+            statusDetail = "Запускаю встроенный OpenCode…"
+            ServerService.start(getApplication())
+        } else {
+            ServerService.stop(getApplication())
+            embeddedKey = null
+            connectionJob?.cancel()
+            baseUrl = settings.baseUrl
+            password = settings.password
+            status = ConnState.IDLE
+            statusDetail = ""
+            if (baseUrl.isNotBlank()) connect()
+        }
+    }
+
+    fun startEmbedded() {
+        if (settings.mode != ServerMode.EMBEDDED) {
+            setMode(ServerMode.EMBEDDED)
+        } else {
+            ServerService.start(getApplication())
+        }
+    }
+
+    fun stopEmbedded() {
+        ServerService.stop(getApplication())
+    }
+
+    fun restartEmbedded() {
+        if (settings.mode != ServerMode.EMBEDDED) {
+            setMode(ServerMode.EMBEDDED)
+        } else {
+            ServerService.restart(getApplication())
+        }
     }
 
     fun normalizeUrl(value: String): String {
@@ -214,7 +305,7 @@ class PocketViewModel(application: Application) : AndroidViewModel(application) 
                 if (selectedAgent == null) selectedAgent = visible.firstOrNull()?.id
             }
 
-        runCatching { api.models(baseUrl, password) }
+        runCatching { loadModelsForRefresh() }
             .onSuccess { list ->
                 val enabled = list.filter { it.enabled }
                 if (enabled.isNotEmpty()) models = enabled
@@ -252,6 +343,48 @@ class PocketViewModel(application: Application) : AndroidViewModel(application) 
         loadProjectSuspend()
         if (failed > 0) statusDetail = "Часть данных не загрузилась, проверь связь"
         saveNow()
+    }
+
+    /**
+     * Настоящий сервер несколько секунд после старта отвечает 503
+     * «Location plugins did not finish activating» на /api/model.
+     * Во встроенном режиме ждём, а не показываем пустой список.
+     */
+    private suspend fun loadModelsForRefresh(): List<ModelChoice> {
+        if (!isEmbedded) return api.models(baseUrl, password)
+        val deadline = System.currentTimeMillis() + 30_000
+        var last: Exception = IllegalStateException("Модели не загрузились")
+        while (currentCoroutineContext().isActive) {
+            try {
+                return api.models(baseUrl, password)
+            } catch (cancel: CancellationException) {
+                throw cancel
+            } catch (error: Exception) {
+                last = error
+                if (System.currentTimeMillis() >= deadline) break
+                delay(750)
+            }
+        }
+        throw last
+    }
+
+    fun refreshModels() {
+        viewModelScope.launch {
+            runCatching { loadModelsForRefresh() }
+                .onSuccess { list ->
+                    val enabled = list.filter { it.enabled }
+                    if (enabled.isEmpty()) return@onSuccess
+                    models = enabled
+                    val current = selectedModelChoice
+                    if (current == null) {
+                        enabled.firstOrNull()?.let {
+                            selectedModelProvider = it.providerID
+                            selectedModelId = it.id
+                            selectedVariant = null
+                        }
+                    }
+                }
+        }
     }
 
     private suspend fun refreshMessagesSuspend(sid: String) {
@@ -610,8 +743,12 @@ class PocketViewModel(application: Application) : AndroidViewModel(application) 
     }
 
     private fun saveNow() {
-        settings.baseUrl = baseUrl
-        settings.password = password
+        // Во встроенном режиме URL и пароль выдаются заново при каждом
+        // запуске сервера — хранить их бессмысленно и вредно.
+        if (settings.mode == ServerMode.EXTERNAL) {
+            settings.baseUrl = baseUrl
+            settings.password = password
+        }
         settings.tab = tab
         settings.saveSession(sessionId, sessionTitle)
         settings.draft = input
@@ -694,6 +831,12 @@ class PocketViewModel(application: Application) : AndroidViewModel(application) 
         }
         if (type == "shell.exited") {
             handleShellExited(data)
+            return
+        }
+        if (type == "provider.updated" || type == "model.updated" ||
+            type == "credential.created" || type == "credential.deleted"
+        ) {
+            refreshModels()
             return
         }
 

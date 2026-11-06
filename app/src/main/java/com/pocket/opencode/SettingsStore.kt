@@ -86,14 +86,32 @@ class SettingsStore(context: Context) {
         set(value) = prefs.edit().putString("session_title", value).apply()
 
     var tab: Int
-        get() = prefs.getInt("tab", 0)
-        set(value) = prefs.edit().putInt("tab", value).apply()
+        get() {
+            val schema = prefs.getInt("tab_schema", 1)
+            val value = TabMigration.map(prefs.getInt("tab", 0), schema)
+            if (schema < TabMigration.SCHEMA) {
+                prefs.edit()
+                    .putInt("tab", value)
+                    .putInt("tab_schema", TabMigration.SCHEMA)
+                    .apply()
+            }
+            return value
+        }
+        set(value) {
+            prefs.edit()
+                .putInt("tab", value)
+                .putInt("tab_schema", TabMigration.SCHEMA)
+                .apply()
+        }
+
+    val modeWasSet: Boolean get() = prefs.contains("mode")
 
     var mode: ServerMode
-        get() = when (prefs.getString("mode", null)) {
-            "external" -> ServerMode.EXTERNAL
-            else -> ServerMode.EMBEDDED
-        }
+        get() = ConnectionModeResolver.resolve(
+            prefs.contains("mode"),
+            prefs.getString("mode", null),
+            prefs.contains("base_url"),
+        )
         set(value) = prefs.edit()
             .putString("mode", if (value == ServerMode.EMBEDDED) "embedded" else "external")
             .apply()
@@ -101,6 +119,10 @@ class SettingsStore(context: Context) {
     var workspacePath: String
         get() = prefs.getString("workspace_path", "/sdcard/OpenCode").orEmpty()
         set(value) = prefs.edit().putString("workspace_path", value).apply()
+
+    var serverPort: Int
+        get() = prefs.getInt("server_port", 4096)
+        set(value) = prefs.edit().putInt("server_port", value).apply()
 
     var draft: String
         get() = prefs.getString("draft", "").orEmpty()
