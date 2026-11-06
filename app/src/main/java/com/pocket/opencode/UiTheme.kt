@@ -33,19 +33,19 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 
-val Bg = Color(0xFF07080F)
-val Card = Color(0xFF111222)
-val Card2 = Color(0xFF191A2E)
-val Line = Color(0xFF262840)
-val Accent = Color(0xFF9B7BFF)
-val AccentDim = Color(0xFF2A2347)
+val Bg = Color(0xFF08070E)
+val Card = Color(0xFF12111D)
+val Card2 = Color(0xFF1A1828)
+val Line = Color(0xFF2A2740)
+val Accent = Color(0xFFA78BFA)
+val AccentDim = Color(0xFF2B2347)
 val Mint = Color(0xFF6EE7C8)
-val TextMain = Color(0xFFF1EFFA)
-val Muted = Color(0xFF8F8EA8)
-val Dim = Color(0xFF63627A)
+val TextMain = Color(0xFFF4F1FB)
+val Muted = Color(0xFF9490A8)
+val Dim = Color(0xFF6B6780)
 val Danger = Color(0xFFFF7A8A)
 val Warn = Color(0xFFFFC46B)
-val CodeBg = Color(0xFF0A0B14)
+val CodeBg = Color(0xFF0B0A12)
 
 @Composable
 fun PocketTheme(content: @Composable () -> Unit) {
@@ -79,9 +79,9 @@ fun Panel(
 ) {
     Surface(
         modifier = modifier,
-        shape = RoundedCornerShape(20.dp),
+        shape = RoundedCornerShape(22.dp),
         color = color,
-        border = BorderStroke(1.dp, Line)
+        border = BorderStroke(1.dp, Line.copy(alpha = 0.7f))
     ) {
         Column(Modifier.padding(16.dp), content = content)
     }
@@ -150,10 +150,10 @@ fun SectionTitle(text: String, trailing: @Composable (() -> Unit)? = null) {
     ) {
         Text(
             text.uppercase(Locale.getDefault()),
-            color = Muted,
-            fontSize = 10.sp,
-            fontWeight = FontWeight.Bold,
-            letterSpacing = 1.8.sp,
+            color = Dim,
+            fontSize = 10.5.sp,
+            fontWeight = FontWeight.SemiBold,
+            letterSpacing = 1.2.sp,
             modifier = Modifier.weight(1f)
         )
         trailing?.invoke()

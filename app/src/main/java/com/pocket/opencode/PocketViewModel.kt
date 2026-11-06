@@ -14,6 +14,7 @@ import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withContext
 import org.json.JSONArray
 import org.json.JSONObject
@@ -150,6 +151,9 @@ class PocketViewModel(application: Application) : AndroidViewModel(application) 
         get() = if (tokensIn == 0L && tokensOut == 0L) "" else "$tokensIn → $tokensOut"
 
     init {
+        DebugBridge.stateProvider = { debugState() }
+        DebugBridge.actionHandler = { name, args -> debugAction(name, args) }
+        DebugLog.event("app", "view model ready")
         val saved = settings.sessionId
         if (saved != null) {
             viewModelScope.launch {
@@ -195,6 +199,7 @@ class PocketViewModel(application: Application) : AndroidViewModel(application) 
                 connectionJob?.cancel()
                 this.status = ConnState.ERROR
                 statusDetail = status.error.ifBlank { "Встроенный сервер не запустился" }
+                DebugLog.event("server", "error", mapOf("error" to statusDetail))
             }
 
             EmbeddedState.STOPPED -> {
@@ -203,6 +208,108 @@ class PocketViewModel(application: Application) : AndroidViewModel(application) 
                 this.status = ConnState.IDLE
                 statusDetail = "Встроенный сервер остановлен"
             }
+        }
+    }
+
+    private fun debugState(): JSONObject = JSONObject().apply {
+        put("app", getApplication<Application>().packageName)
+        put("version", appVersion())
+        put("tab", tab)
+        put("status", status.name)
+        put("statusDetail", statusDetail)
+        put("mode", settings.mode.name)
+        put(
+            "server",
+            JSONObject()
+                .put("state", serverStatus.state.name)
+                .put("url", serverStatus.url)
+                .put("workspace", serverStatus.workspace)
+                .put("error", serverStatus.error)
+                .put("version", serverStatus.version)
+        )
+        put("workspace", workspacePath)
+        put("access", hasAllFilesAccess)
+        put("session", sessionId ?: "")
+        put("sessionTitle", sessionTitle)
+        put("sessionDirectory", sessionDirectory)
+        put("running", running)
+        put("messages", messages.size)
+        put("model", selectedModelId ?: "")
+        put("agent", selectedAgent ?: "")
+        put("inputLength", input.length)
+        put("errors", JSONObject().apply {
+            if (statusDetail.isNotBlank()) put("status", statusDetail)
+            if (providerError.isNotBlank()) put("provider", providerError)
+            if (skillError.isNotBlank()) put("skills", skillError)
+            if (configError.isNotBlank()) put("config", configError)
+            if (migrationError.isNotBlank()) put("migration", migrationError)
+        })
+        put("bridge", DebugBridge.info().put("token", "***"))
+    }
+
+    private fun appVersion(): String = runCatching {
+        val info = getApplication<Application>().packageManager
+            .getPackageInfo(getApplication<Application>().packageName, 0)
+        info.versionName.orEmpty()
+    }.getOrDefault("")
+
+    private fun debugAction(name: String, args: JSONObject): JSONObject {
+        val app = getApplication<Application>()
+        return when (name) {
+            "start" -> {
+                ServerService.start(app)
+                JSONObject().put("ok", true).put("action", name)
+            }
+
+            "stop" -> {
+                ServerService.stop(app)
+                JSONObject().put("ok", true).put("action", name)
+            }
+
+            "restart" -> {
+                ServerService.restart(app)
+                JSONObject().put("ok", true).put("action", name)
+            }
+
+            "reload" -> {
+                viewModelScope.launch {
+                    runCatching { api.reload(baseUrl, password) }
+                        .onFailure { DebugLog.error("reload", it) }
+                }
+                JSONObject().put("ok", true).put("action", name)
+            }
+
+            "skills" -> {
+                loadSkills()
+                JSONObject().put("ok", true).put("action", name)
+            }
+
+            "config" -> {
+                viewModelScope.launch { loadConfig() }
+                JSONObject().put("ok", true).put("action", name)
+            }
+
+            "prompt" -> {
+                val text = args.optString("text")
+                if (text.isBlank()) return JSONObject().put("error", "text is required")
+                viewModelScope.launch {
+                    onInputChange(text)
+                    send()
+                }
+                JSONObject().put("ok", true).put("action", name)
+            }
+
+            "api" -> {
+                val method = args.optString("method", "GET")
+                val path = args.optString("path")
+                if (path.isBlank()) return JSONObject().put("error", "path is required")
+                val raw = runBlocking {
+                    api.raw(baseUrl, password, method, path, args.optJSONObject("body"))
+                }
+                JSONObject().put("ok", true).put("raw", raw)
+            }
+
+            else -> JSONObject().put("error", "unknown action: $name")
         }
     }
 

@@ -119,6 +119,10 @@ object EmbeddedServer {
             }
         }
 
+        // Скилы из assets должны оказаться в конфиге до старта процесса,
+        // иначе первый /api/skill не увидит встроенный набор.
+        runCatching { SkillSeeder.seed(context, paths) }
+
         val bin = File(context.applicationInfo.nativeLibraryDir, "libocserver.so")
         if (!bin.isFile) {
             fail(gen, "Не найден встроенный сервер: ${bin.absolutePath}")
@@ -227,6 +231,7 @@ object EmbeddedServer {
                         version = version,
                     )
                 }
+                DebugLog.event("server", "running", mapOf("port" to port.toString(), "version" to version))
                 return
             }
             Thread.sleep(HEALTH_INTERVAL_MS)

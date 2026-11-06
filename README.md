@@ -6,7 +6,7 @@ Android-клиент со **встроенным настоящим сервер
 автоматически.
 
 - Пакет: `com.pocket.opencode`
-- Версия: `0.2.0` (`versionCode 2`)
+- Версия: `0.3.0` (`versionCode 3`)
 - Минимальная Android: 8.0 (API 26), target 35
 - ABI: только `arm64-v8a`
 - Сервер: `2.1.4-beta.4b83402a`
@@ -26,6 +26,12 @@ Android-клиент со **встроенным настоящим сервер
   DeepSeek, xAI, Groq, Mistral и остальные из каталога OpenCode.
 - Скилы: просмотр, создание, редактирование, удаление, глобальные и
   проектные, встроенные — только чтение.
+- 42 каталога скилов из Termux уже внутри APK: при первом старте сервера
+  они раскладываются в конфиг, существующие файлы не перезаписываются.
+- Плавающий нижний док с линейными иконками: не привязан к клавиатуре,
+  скрывается при вводе, поле ввода поднимается отдельно.
+- Скрытый канал отладки на loopback: состояние, журнал ошибок, логи
+  сервера и прокси к API без открытия UI (см. «Отладка»).
 - Редактор `config.json` с проверкой JSON и перезагрузкой сервера.
 - Рабочий каталог на общем хранилище (`/sdcard/OpenCode`) или внутренняя
   папка приложения, если нет «Доступа ко всем файлам».
@@ -78,6 +84,9 @@ tar czf /sdcard/OpenCode/import/opencode-backup.tar.gz -C $HOME \
 | Конфиг | `files/opencode/home/config/opencode/config.json` |
 | Скилы | `files/opencode/home/config/opencode/skills` |
 | Логи сервера | `files/opencode/logs/server.log` |
+| Журнал отладки | `files/opencode/debug/events.ndjson` |
+| Токен отладочного моста | `files/opencode/debug/token` |
+| Зеркало журнала | `/sdcard/OpenCode/.debug/events.ndjson` |
 | Рабочий каталог | `/sdcard/OpenCode` (или `files/opencode/workspace`) |
 | Резервные копии | `files/opencode/backup-*` |
 
@@ -85,6 +94,31 @@ tar czf /sdcard/OpenCode/import/opencode-backup.tar.gz -C $HOME \
 в доверенное место. Штатного экспорта настроек в UI пока нет: для переноса
 на другое устройство используй копию каталога `files/opencode` (например,
 через `run-as`/ADB на отладочной сборке).
+
+## Отладка
+
+Скрытый мост слушает только `127.0.0.1` (порты 4097–4100) и требует токен
+из `files/opencode/debug/token`. Без токена — `401`. Актуальный порт виден в
+панели: если 4097 занят другим приложением, мост берёт следующий свободный.
+Панель открывается долгим нажатием на знак `>_` в шапке: там состояние моста,
+последние события, копирование диагностики и очистка. Токен в панели и в
+ответах `/state` замаскирован.
+
+```bash
+TOKEN=$(run-as com.pocket.opencode cat files/opencode/debug/token)
+curl -H "Authorization: Bearer $TOKEN" http://127.0.0.1:4097/health
+curl -H "Authorization: Bearer $TOKEN" http://127.0.0.1:4097/state
+curl -H "Authorization: Bearer $TOKEN" 'http://127.0.0.1:4097/events?limit=50'
+curl -H "Authorization: Bearer $TOKEN" 'http://127.0.0.1:4097/logs?limit=100'
+curl -X POST -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
+  -d '{"name":"restart"}' http://127.0.0.1:4097/action
+curl -X POST -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
+  -d '{"method":"GET","path":"/api/session"}' http://127.0.0.1:4097/api
+```
+
+Действия `/action`: `start`, `stop`, `restart`, `reload`, `skills`,
+`config`, `prompt` (`{"name":"prompt","text":"…"}`). Пароли, токены и
+ключи провайдеров вычищаются из журнала и из ответа `/logs`.
 
 ## Сборка
 
@@ -98,8 +132,8 @@ bash scripts/remote.sh test '*'
 bash scripts/remote.sh build
 ```
 
-APK: `app/build/outputs/apk/debug/app-debug.apk`, около 75–90 МБ —
-внутри лежит бинарник сервера `lib/arm64-v8a/libocserver.so`.
+APK: `app/build/outputs/apk/debug/app-debug.apk`, около 90 МБ —
+внутри бинарник сервера `lib/arm64-v8a/libocserver.so` и 42 каталога скилов.
 
 ## Ограничения
 

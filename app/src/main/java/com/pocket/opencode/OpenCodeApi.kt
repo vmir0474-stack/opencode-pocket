@@ -51,11 +51,45 @@ class OpenCodeApi {
     }
 
     private suspend fun call(request: Request): String = withContext(Dispatchers.IO) {
-        client.newCall(request).execute().use { response ->
-            val body = response.body?.string().orEmpty()
-            if (!response.isSuccessful) throw ApiException(response.code, body)
-            body
+        try {
+            client.newCall(request).execute().use { response ->
+                val body = response.body?.string().orEmpty()
+                if (!response.isSuccessful) {
+                    DebugLog.event(
+                        "api",
+                        "HTTP ${response.code} ${request.method} ${request.url.encodedPath}",
+                        mapOf("body" to body.take(400))
+                    )
+                    throw ApiException(response.code, body)
+                }
+                body
+            }
+        } catch (t: Throwable) {
+            if (t !is ApiException) DebugLog.error("api", t)
+            throw t
         }
+    }
+
+    /** Сырой запрос к OpenCode API для отладочного моста. */
+    suspend fun raw(
+        base: String,
+        password: String,
+        method: String,
+        path: String,
+        body: JSONObject?
+    ): String {
+        val url = root(base) + if (path.startsWith("/")) path else "/$path"
+        val builder = request(url, password)
+        val payload = (body ?: JSONObject()).toString().toRequestBody(jsonType)
+        when (method.uppercase()) {
+            "GET" -> builder.get()
+            "DELETE" -> builder.delete()
+            "POST" -> builder.post(payload)
+            "PATCH" -> builder.patch(payload)
+            "PUT" -> builder.put(payload)
+            else -> throw IllegalArgumentException("unsupported method: $method")
+        }
+        return call(builder.build())
     }
 
     private fun post(url: String, password: String, body: JSONObject): Request =
