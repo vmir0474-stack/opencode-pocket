@@ -1,28 +1,112 @@
-# OpenCode Pocket (Android)
+# OpenCode Pocket
 
-Kotlin + Jetpack Compose mobile client for an OpenCode Server running on the same Android device (Termux).
+Android-клиент со **встроенным настоящим сервером OpenCode v2**. Termux нужен
+только один раз — чтобы перенести старые сессии, скилы и ключи. После этого
+приложение работает само: сервер запускается из APK, UI подключается к нему
+автоматически.
 
-## Features
-- Dark violet mobile UI
-- Health check (`GET /api/info`)
-- Create session (`POST /api/session`)
-- Send prompt (`POST /api/session/{id}/prompt`) and wait for the agent reply
-- Read session messages (`GET /api/session/{id}/message`)
-- Configure local server URL and optional server password
+- Пакет: `com.pocket.opencode`
+- Версия: `0.2.0` (`versionCode 2`)
+- Минимальная Android: 8.0 (API 26), target 35
+- ABI: только `arm64-v8a`
+- Сервер: `2.1.4-beta.4b83402a`
 
-## Termux setup (same phone)
-Run OpenCode server from the project directory:
-```sh
-cd ~/projects/my-app
-opencode serve --hostname 127.0.0.1 --port 4096
+## Что умеет
+
+- Встроенный сервер OpenCode в foreground-сервисе: уведомление «OpenCode
+  работает · порт …», кнопка «Стоп», сервер переживает свайп из recents.
+- Автоподключение UI к случайному порту и паролю, который сервер печатает
+  при старте. Пароль нигде не сохраняется во встроенном режиме.
+- Внешний режим для отладки: адрес и пароль задаются вручную.
+- Стриминг текста, reasoning, tool calls, shell-команд и их вывода,
+  permission-диалоги и формы.
+- Сессии, черновик, выбранная модель/агент, вкладка и кэш переписки
+  переживают поворот экрана и перезапуск приложения.
+- Свои провайдеры и API-ключи: Anthropic, OpenAI, OpenRouter, Google,
+  DeepSeek, xAI, Groq, Mistral и остальные из каталога OpenCode.
+- Скилы: просмотр, создание, редактирование, удаление, глобальные и
+  проектные, встроенные — только чтение.
+- Редактор `config.json` с проверкой JSON и перезагрузкой сервера.
+- Рабочий каталог на общем хранилище (`/sdcard/OpenCode`) или внутренняя
+  папка приложения, если нет «Доступа ко всем файлам».
+- Импорт из Termux с резервной копией текущих данных.
+
+## Первый запуск
+
+1. Установи APK (только ARM64).
+2. Приложение запустит сервер и покажет уведомление. Разреши уведомления,
+   если Android спросит.
+3. На вкладке «Связь» выдай **«Доступ ко всем файлам»**, чтобы агент видел
+   `/sdcard/OpenCode`. Без доступа сервер работает во внутренней папке
+   `files/opencode/workspace`, и файлы не видны в проводнике.
+4. После выдачи доступа вернись в приложение — сервер перезапустится сам.
+5. На вкладке «Модели» при желании добавь свой ключ провайдера.
+
+## Провайдеры и лимит
+
+Бесплатные модели OpenCode ограничены **на стороне аккаунта**, а не
+приложением. Сообщение `provider.free-limit` / HTTP 429 приходит от
+провайдера, и VPN его не обходит. Свой ключ провайдера снимает ограничение:
+запросы идут напрямую в выбранный сервис.
+
+Ключ хранится в базе OpenCode на устройстве и отправляется только этому
+провайдеру. В логах и интерфейсе полный ключ не показывается.
+
+## Перенос из Termux
+
+В Termux:
+
+```bash
+mkdir -p /sdcard/OpenCode/import
+tar czf /sdcard/OpenCode/import/opencode-backup.tar.gz -C $HOME \
+  .local/share/opencode .config/opencode
 ```
-Set the app server address to `http://127.0.0.1:4096`.
-The server prints a generated password at startup; enter it in the app settings.
-Keep the server bound to localhost; do not expose it publicly.
 
-## Build APK
-Open in Android Studio and Build > Build APK(s), or run:
-```sh
-gradle assembleDebug
+Затем в приложении: «Связь» → «Перенос из Termux» → укажи путь к архиву →
+«Проверить архив» → «Импортировать». Текущие данные сохраняются в
+`files/opencode/backup-<дата>`, старые пути Termux переписываются на
+`/sdcard/OpenCode`. После импорта сервер перезапускается.
+
+## Где что лежит
+
+Всё приватное — внутри приложения, без root:
+
+| Что | Путь |
+| --- | --- |
+| HOME / XDG | `files/opencode/home` |
+| База OpenCode | `files/opencode/home/data/opencode/opencode.db` |
+| Конфиг | `files/opencode/home/config/opencode/config.json` |
+| Скилы | `files/opencode/home/config/opencode/skills` |
+| Логи сервера | `files/opencode/logs/server.log` |
+| Рабочий каталог | `/sdcard/OpenCode` (или `files/opencode/workspace`) |
+| Резервные копии | `files/opencode/backup-*` |
+
+База содержит сессии и ключи провайдеров в открытом виде. Копируй её только
+в доверенное место. Штатного экспорта настроек в UI пока нет: для переноса
+на другое устройство используй копию каталога `files/opencode` (например,
+через `run-as`/ADB на отладочной сборке).
+
+## Сборка
+
+```bash
+# локально (нужен Android SDK 35 и JDK 17)
+./gradlew assembleDebug
+
+# или удалённо, если настроен POCKET_HOST/POCKET_PASS
+bash scripts/remote.sh sync
+bash scripts/remote.sh test '*'
+bash scripts/remote.sh build
 ```
-The APK is written to `app/build/outputs/apk/debug/app-debug.apk`.
+
+APK: `app/build/outputs/apk/debug/app-debug.apk`, около 75–90 МБ —
+внутри лежит бинарник сервера `lib/arm64-v8a/libocserver.so`.
+
+## Ограничения
+
+- Только ARM64: x86-эмулятор не подойдёт.
+- MCP в этой версии откладывается; экран MCP появится позже.
+- Вход в аккаунт OpenCode через браузер (device flow) пока не реализован —
+  доступны бесплатные модели и свои ключи.
+- Сервер слушает только `127.0.0.1`; не выставляй его в интернет.
+- Квота бесплатных моделей общая для аккаунта OpenCode, приложение её не
+  обходит.

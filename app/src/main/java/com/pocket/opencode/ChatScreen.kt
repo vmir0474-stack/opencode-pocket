@@ -34,8 +34,10 @@ import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.Send
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.Button
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.SmallFloatingActionButton
@@ -83,6 +85,10 @@ fun ChatScreen(vm: PocketViewModel) {
             onModels = { showModels = true },
             onAgents = { showAgents = true }
         )
+
+        if (vm.isEmbedded && !vm.hasAllFilesAccess && !vm.onboardingDismissed) {
+            WorkspaceOnboarding(vm)
+        }
 
         Box(Modifier.weight(1f)) {
             Transcript(vm)
@@ -143,6 +149,57 @@ private fun ContextBar(
         ChipButton(label = vm.agentLabel, onClick = onAgents)
         if (vm.usageLabel.isNotBlank()) {
             ChipButton(label = vm.usageLabel, tone = Color(0xFF13241F))
+        }
+    }
+}
+
+@Composable
+private fun WorkspaceOnboarding(vm: PocketViewModel) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(AccentDim)
+            .padding(horizontal = 16.dp, vertical = 12.dp)
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Icon(Icons.Default.Warning, null, tint = Accent, modifier = Modifier.size(16.dp))
+            Spacer(Modifier.width(9.dp))
+            Text(
+                "Доступ к файлам",
+                color = TextMain,
+                fontSize = 13.sp,
+                fontWeight = FontWeight.SemiBold,
+                modifier = Modifier.weight(1f)
+            )
+            TextButton(
+                onClick = { vm.dismissOnboarding() },
+                contentPadding = PaddingValues(horizontal = 6.dp, vertical = 0.dp)
+            ) {
+                Text("Скрыть", color = Muted, fontSize = 11.sp)
+            }
+        }
+        Spacer(Modifier.height(4.dp))
+        Text(
+            "Чтобы агент видел /sdcard/OpenCode, выдай «Доступ ко всем файлам». " +
+                "Без него сервер работает во внутренней папке приложения.",
+            color = Muted,
+            fontSize = 11.5.sp,
+            lineHeight = 16.sp
+        )
+        Spacer(Modifier.height(10.dp))
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Button(
+                onClick = { vm.openAllFilesSettings() },
+                shape = RoundedCornerShape(11.dp)
+            ) {
+                Text("Открыть настройки", fontSize = 11.5.sp)
+            }
+            OutlinedButton(
+                onClick = { vm.dismissOnboarding() },
+                shape = RoundedCornerShape(11.dp)
+            ) {
+                Text("Внутренняя папка", fontSize = 11.5.sp)
+            }
         }
     }
 }

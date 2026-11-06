@@ -45,6 +45,7 @@ import java.util.Locale
 fun SettingsScreen(vm: PocketViewModel) {
     var revealPassword by rememberSaveable { mutableStateOf(false) }
     var confirmReset by remember { mutableStateOf(false) }
+    var showConfig by rememberSaveable { mutableStateOf(false) }
 
     Column(
         modifier = Modifier
@@ -60,9 +61,88 @@ fun SettingsScreen(vm: PocketViewModel) {
             }
         }
 
+        ServerPanel(vm)
+        WorkspacePanel(vm)
+        QuotaPanel(vm)
+        MigrationPanel(vm)
+
         Panel {
-            SectionTitle("Подключение")
-            Spacer(Modifier.height(10.dp))
+            SectionTitle("Конфиг OpenCode") {
+                TextButton(
+                    onClick = {
+                        showConfig = !showConfig
+                        if (showConfig) vm.loadConfig()
+                    },
+                    contentPadding = androidx.compose.foundation.layout.PaddingValues(
+                        horizontal = 8.dp,
+                        vertical = 0.dp
+                    )
+                ) {
+                    Text(if (showConfig) "Скрыть" else "Открыть", color = Accent, fontSize = 11.sp)
+                }
+            }
+            if (showConfig) {
+                Spacer(Modifier.height(8.dp))
+                Text(
+                    vm.configFilePath().absolutePath,
+                    color = Dim,
+                    fontSize = 9.5.sp,
+                    fontFamily = FontFamily.Monospace,
+                    lineHeight = 14.sp
+                )
+                Spacer(Modifier.height(8.dp))
+                OutlinedTextField(
+                    value = vm.configText,
+                    onValueChange = {
+                        vm.configText = it
+                        vm.configError = ""
+                    },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(220.dp),
+                    label = { Text("config.json", color = Muted, fontSize = 11.sp) },
+                    shape = RoundedCornerShape(13.dp),
+                    textStyle = androidx.compose.ui.text.TextStyle(
+                        fontFamily = FontFamily.Monospace,
+                        fontSize = 11.sp
+                    ),
+                    colors = fieldColors()
+                )
+                if (vm.configError.isNotBlank()) {
+                    Spacer(Modifier.height(6.dp))
+                    Text(vm.configError, color = Danger, fontSize = 11.sp, lineHeight = 16.sp)
+                }
+                Spacer(Modifier.height(10.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Button(
+                        onClick = { vm.saveConfig(vm.configText) },
+                        shape = RoundedCornerShape(13.dp),
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        Text("Сохранить", fontSize = 11.5.sp)
+                    }
+                    OutlinedButton(
+                        onClick = { vm.loadConfig() },
+                        shape = RoundedCornerShape(13.dp)
+                    ) {
+                        Text("Сбросить", fontSize = 11.5.sp)
+                    }
+                }
+                Spacer(Modifier.height(8.dp))
+                OutlinedButton(
+                    onClick = { vm.restartEmbedded() },
+                    shape = RoundedCornerShape(13.dp),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text("Перезагрузить сервер", fontSize = 11.5.sp)
+                }
+            }
+        }
+
+        if (!vm.isEmbedded) {
+            Panel {
+                SectionTitle("Подключение")
+                Spacer(Modifier.height(10.dp))
             OutlinedTextField(
                 value = vm.baseUrl,
                 onValueChange = vm::onBaseUrlChange,
@@ -149,26 +229,6 @@ fun SettingsScreen(vm: PocketViewModel) {
                 fontSize = 10.5.sp,
                 lineHeight = 15.sp
             )
-        }
-
-        Panel {
-            SectionTitle("Сервер")
-            Spacer(Modifier.height(8.dp))
-            val info = vm.serverInfo
-            if (info == null) {
-                EmptyHint("Нет данных", "Подключись, чтобы увидеть информацию о сервере.")
-            } else {
-                KeyValueRow("Версия", info.version.ifBlank { "—" }, mono = true)
-                KeyValueRow("PID", info.pid.toString(), mono = true)
-                KeyValueRow("Хост", info.hostname.ifBlank { "—" }, mono = true)
-                KeyValueRow(
-                    "Каталог",
-                    vm.directoryLabel.ifBlank { "—" },
-                    mono = true
-                )
-                info.urls.firstOrNull()?.let {
-                    KeyValueRow("URL", it, mono = true)
-                }
             }
         }
 

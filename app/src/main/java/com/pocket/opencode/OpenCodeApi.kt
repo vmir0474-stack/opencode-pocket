@@ -316,6 +316,59 @@ class OpenCodeApi {
         return out
     }
 
+    suspend fun integrations(base: String, password: String): List<IntegrationInfo> {
+        val raw = call(request("${root(base)}/api/integration", password).get().build())
+        val arr = JSONObject(raw).optJSONArray("data") ?: return emptyList()
+        val out = mutableListOf<IntegrationInfo>()
+        for (i in 0 until arr.length()) arr.optJSONObject(i)?.let { out += parseIntegration(it) }
+        return out
+    }
+
+    suspend fun credentials(base: String, password: String): List<CredentialInfo> {
+        val raw = call(request("${root(base)}/api/credential", password).get().build())
+        val arr = JSONObject(raw).optJSONArray("data") ?: return emptyList()
+        val out = mutableListOf<CredentialInfo>()
+        for (i in 0 until arr.length()) arr.optJSONObject(i)?.let { out += parseCredential(it) }
+        return out
+    }
+
+    suspend fun addKeyCredential(
+        base: String,
+        password: String,
+        integrationID: String,
+        key: String,
+        label: String = "default"
+    ): CredentialInfo {
+        val body = CredentialPayload.key(integrationID, key, label)
+        val raw = call(post("${root(base)}/api/credential", password, body))
+        val data = JSONObject(raw).optJSONObject("data") ?: JSONObject()
+        return parseCredential(data)
+    }
+
+    suspend fun deleteCredential(base: String, password: String, id: String) {
+        call(
+            request("${root(base)}/api/credential/$id", password)
+                .delete()
+                .build()
+        )
+    }
+
+    suspend fun skills(base: String, password: String): List<SkillInfo> {
+        val raw = call(request("${root(base)}/api/skill", password).get().build())
+        val arr = JSONObject(raw).optJSONArray("data") ?: return emptyList()
+        val out = mutableListOf<SkillInfo>()
+        for (i in 0 until arr.length()) arr.optJSONObject(i)?.let { out += parseSkill(it) }
+        return out
+    }
+
+    suspend fun reload(base: String, password: String) {
+        call(
+            request("${root(base)}/api/location/reload", password)
+                .post("{}".toRequestBody(jsonType))
+                .build()
+        )
+    }
+
     /**
      * SSE-поток событий OpenCode. Читается в отдельном потоке, потому что
      * OkHttp блокируется на readUtf8Line(). При отмене коллектора call.cancel()

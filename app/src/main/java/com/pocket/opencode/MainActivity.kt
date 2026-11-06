@@ -25,9 +25,11 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Build
 import androidx.compose.material.icons.filled.List
 import androidx.compose.material.icons.filled.Send
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.Star
 import androidx.compose.material3.Badge
 import androidx.compose.material3.BadgedBox
 import androidx.compose.material3.Icon
@@ -50,6 +52,11 @@ import androidx.compose.ui.unit.sp
 
 class MainActivity : ComponentActivity() {
     private val vm: PocketViewModel by viewModels()
+
+    override fun onResume() {
+        super.onResume()
+        vm.onAppResume()
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -92,6 +99,8 @@ fun PocketApp(vm: PocketViewModel) {
                 when (vm.tab) {
                     0 -> ChatScreen(vm)
                     1 -> ProjectScreen(vm)
+                    2 -> ProvidersScreen(vm)
+                    3 -> SkillsScreen(vm)
                     else -> SettingsScreen(vm)
                 }
             }
@@ -190,6 +199,20 @@ private fun PocketTabs(vm: PocketViewModel) {
         NavigationBarItem(
             selected = vm.tab == 2,
             onClick = { vm.selectTab(2) },
+            icon = { Icon(Icons.Default.Star, contentDescription = "Модели") },
+            label = { Text("Модели", fontSize = 10.5.sp) },
+            colors = tabColors()
+        )
+        NavigationBarItem(
+            selected = vm.tab == 3,
+            onClick = { vm.selectTab(3) },
+            icon = { Icon(Icons.Default.Build, contentDescription = "Скилы") },
+            label = { Text("Скилы", fontSize = 10.5.sp) },
+            colors = tabColors()
+        )
+        NavigationBarItem(
+            selected = vm.tab == 4,
+            onClick = { vm.selectTab(4) },
             icon = { Icon(Icons.Default.Settings, contentDescription = "Связь") },
             label = { Text("Связь", fontSize = 10.5.sp) },
             colors = tabColors()

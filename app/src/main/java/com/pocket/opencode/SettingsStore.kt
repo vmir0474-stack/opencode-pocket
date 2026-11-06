@@ -120,6 +120,10 @@ class SettingsStore(context: Context) {
         get() = prefs.getString("workspace_path", "/sdcard/OpenCode").orEmpty()
         set(value) = prefs.edit().putString("workspace_path", value).apply()
 
+    var onboardingDismissed: Boolean
+        get() = prefs.getBoolean("onboarding_dismissed", false)
+        set(value) = prefs.edit().putBoolean("onboarding_dismissed", value).apply()
+
     var serverPort: Int
         get() = prefs.getInt("server_port", 4096)
         set(value) = prefs.edit().putInt("server_port", value).apply()

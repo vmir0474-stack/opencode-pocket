@@ -17,6 +17,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.json.JSONArray
 import org.json.JSONObject
+import java.io.File
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -49,6 +50,12 @@ class PocketViewModel(application: Application) : AndroidViewModel(application) 
     var serverStatus by mutableStateOf(EmbeddedServer.status.value)
     var serverLog by mutableStateOf<List<String>>(emptyList())
 
+    var workspacePath by mutableStateOf(settings.workspacePath)
+    var hasAllFilesAccess by mutableStateOf(Workspace.hasAllFilesAccess(application))
+    var workspaceUsable by mutableStateOf(false)
+    var onboardingDismissed by mutableStateOf(settings.onboardingDismissed)
+    private var observedAccess = hasAllFilesAccess
+
     val isEmbedded: Boolean get() = settings.mode == ServerMode.EMBEDDED
 
     var sessionId by mutableStateOf(settings.sessionId)
@@ -65,6 +72,27 @@ class PocketViewModel(application: Application) : AndroidViewModel(application) 
 
     var models by mutableStateOf<List<ModelChoice>>(emptyList())
     var agents by mutableStateOf<List<AgentChoice>>(emptyList())
+    var integrations by mutableStateOf<List<IntegrationInfo>>(emptyList())
+    var credentials by mutableStateOf<List<CredentialInfo>>(emptyList())
+    var providerBusy by mutableStateOf(false)
+    var providerError by mutableStateOf("")
+    var providerStatus by mutableStateOf("")
+
+    var skills by mutableStateOf<List<SkillInfo>>(emptyList())
+    var skillBusy by mutableStateOf(false)
+    var skillError by mutableStateOf("")
+    var skillStatus by mutableStateOf("")
+
+    var configText by mutableStateOf("")
+    var configError by mutableStateOf("")
+    var configLoaded by mutableStateOf(false)
+
+    var migrationPath by mutableStateOf("/sdcard/OpenCode/import/opencode-backup.tar.gz")
+    var migrationPreview by mutableStateOf<MigrationPreview?>(null)
+    var migrationResult by mutableStateOf<MigrationResult?>(null)
+    var migrationBusy by mutableStateOf(false)
+    var migrationError by mutableStateOf("")
+    var migrationNotice by mutableStateOf("")
     var selectedModelProvider by mutableStateOf(settings.modelProvider)
     var selectedModelId by mutableStateOf(settings.modelId)
     var selectedVariant by mutableStateOf(settings.modelVariant)
@@ -135,6 +163,7 @@ class PocketViewModel(application: Application) : AndroidViewModel(application) 
         viewModelScope.launch {
             EmbeddedServer.status.collect { onEmbeddedStatus(it) }
         }
+        refreshWorkspaceAccess()
         if (settings.mode == ServerMode.EXTERNAL) {
             if (settings.baseUrl.isNotBlank()) connect()
         }
@@ -215,6 +244,63 @@ class PocketViewModel(application: Application) : AndroidViewModel(application) 
         } else {
             ServerService.restart(getApplication())
         }
+    }
+
+    fun onWorkspacePathChange(value: String) {
+        workspacePath = value
+        settings.workspacePath = value
+    }
+
+    fun onAppResume() {
+        refreshWorkspaceAccess()
+    }
+
+    /**
+     * Перепроверяет «Доступ ко всем файлам». Если пользователь только что
+     * выдал его, а сервер работает во внутренней папке, перезапускаем его,
+     * чтобы агент увидел /sdcard/OpenCode.
+     */
+    fun refreshWorkspaceAccess() {
+        val access = Workspace.hasAllFilesAccess(getApplication())
+        hasAllFilesAccess = access
+        val requested = File(workspacePath.ifBlank { Workspace.defaultPath() })
+        workspaceUsable = Workspace.isUsable(requested)
+        val wasDenied = !observedAccess
+        observedAccess = access
+        if (!access || settings.mode != ServerMode.EMBEDDED) return
+        val status = EmbeddedServer.status.value
+        if (status.state != EmbeddedState.RUNNING) return
+        // Сервер мог стартовать до выдачи доступа и остаться во внутренней
+        // папке. Сравниваем фактический каталог с выбранным и перезапускаем.
+        val wrongWorkspace = status.workspace.isNotBlank() &&
+            !samePath(status.workspace, requested.absolutePath)
+        if (wasDenied || wrongWorkspace) {
+            ServerService.restart(getApplication())
+        }
+    }
+
+    private fun samePath(left: String, right: String): Boolean {
+        val a = runCatching { File(left).canonicalPath }.getOrDefault(left)
+        val b = runCatching { File(right).canonicalPath }.getOrDefault(right)
+        return a.trimEnd('/') == b.trimEnd('/')
+    }
+
+    fun checkWorkspace() {
+        refreshWorkspaceAccess()
+        statusDetail = if (workspaceUsable) {
+            "Каталог доступен: $workspacePath"
+        } else {
+            "Нет доступа к $workspacePath — сервер использует внутреннюю папку"
+        }
+    }
+
+    fun openAllFilesSettings() {
+        Workspace.openAllFilesSettings(getApplication())
+    }
+
+    fun dismissOnboarding() {
+        onboardingDismissed = true
+        settings.onboardingDismissed = true
     }
 
     fun normalizeUrl(value: String): String {
@@ -320,6 +406,23 @@ class PocketViewModel(application: Application) : AndroidViewModel(application) 
         runCatching { api.activeSessions(baseUrl, password) }
             .onSuccess { activeSessions = it }
 
+        runCatching { api.integrations(baseUrl, password) }
+            .onSuccess { integrations = ProviderCatalog.ordered(it) }
+            .onFailure { failed++ }
+
+        runCatching { api.credentials(baseUrl, password) }
+            .onSuccess { credentials = it }
+            .onFailure { failed++ }
+
+        runCatching { api.skills(baseUrl, password) }
+            .onSuccess { skills = it }
+            .onFailure { failed++ }
+
+        if (!configLoaded) {
+            configText = withContext(Dispatchers.IO) { ConfigStore.read(configFilePath()) }
+            configLoaded = true
+        }
+
         val sid = sessionId
         if (sid != null) {
             var info = sessions.firstOrNull { it.id == sid }
@@ -384,6 +487,222 @@ class PocketViewModel(application: Application) : AndroidViewModel(application) 
                         }
                     }
                 }
+        }
+    }
+
+    fun loadProviders() {
+        if (status != ConnState.CONNECTED) return
+        viewModelScope.launch {
+            providerBusy = true
+            providerError = ""
+            runCatching { api.integrations(baseUrl, password) }
+                .onSuccess { integrations = ProviderCatalog.ordered(it) }
+                .onFailure { providerError = "Провайдеры: ${it.message}" }
+            runCatching { api.credentials(baseUrl, password) }
+                .onSuccess { credentials = it }
+                .onFailure { providerError = "Ключи: ${it.message}" }
+            providerBusy = false
+        }
+    }
+
+    fun addProviderKey(integrationID: String, key: String) {
+        val trimmed = key.trim()
+        if (trimmed.isEmpty()) {
+            providerError = "Введи ключ провайдера"
+            return
+        }
+        viewModelScope.launch {
+            providerBusy = true
+            providerError = ""
+            providerStatus = ""
+            runCatching { api.addKeyCredential(baseUrl, password, integrationID, trimmed) }
+                .onSuccess {
+                    providerStatus = "Ключ добавлен"
+                    loadProviders()
+                    refreshModels()
+                }
+                .onFailure { providerError = "Не удалось сохранить ключ: ${it.message}" }
+            providerBusy = false
+        }
+    }
+
+    fun removeProvider(credentialID: String) {
+        viewModelScope.launch {
+            providerBusy = true
+            providerError = ""
+            providerStatus = ""
+            runCatching { api.deleteCredential(baseUrl, password, credentialID) }
+                .onSuccess {
+                    providerStatus = "Ключ удалён"
+                    loadProviders()
+                    refreshModels()
+                }
+                .onFailure { providerError = "Не удалось удалить ключ: ${it.message}" }
+            providerBusy = false
+        }
+    }
+
+    private fun serverPaths(): ServerPaths = ServerPaths.forContext(
+        getApplication(),
+        File(workspacePath.ifBlank { Workspace.defaultPath() })
+    )
+
+    fun configFilePath(): File = File(serverPaths().config, "opencode/config.json")
+
+    fun isSkillWritable(path: String): Boolean {
+        val paths = serverPaths()
+        return SkillWriter.isWritable(path, paths.config, paths.workspace)
+    }
+
+    fun loadSkills() {
+        if (status != ConnState.CONNECTED) return
+        viewModelScope.launch {
+            skillBusy = true
+            skillError = ""
+            runCatching { api.skills(baseUrl, password) }
+                .onSuccess { skills = it }
+                .onFailure { skillError = "Скилы: ${it.message}" }
+            skillBusy = false
+        }
+    }
+
+    fun saveSkill(name: String, description: String, body: String, project: Boolean) {
+        val trimmedName = name.trim()
+        if (trimmedName.isEmpty()) {
+            skillError = "Название скила не может быть пустым"
+            return
+        }
+        viewModelScope.launch {
+            skillBusy = true
+            skillError = ""
+            skillStatus = ""
+            val paths = serverPaths()
+            val root = if (project) {
+                File(paths.workspace, ".opencode/skills")
+            } else {
+                File(paths.config, "opencode/skills")
+            }
+            val file = File(File(root, SkillWriter.safeName(trimmedName)), "SKILL.md")
+            runCatching {
+                file.parentFile?.mkdirs()
+                file.writeText(SkillWriter.render(trimmedName, description, body))
+                api.reload(baseUrl, password)
+            }.onSuccess {
+                skillStatus = "Скил сохранён"
+                loadSkills()
+            }.onFailure { skillError = "Не удалось сохранить: ${it.message}" }
+            skillBusy = false
+        }
+    }
+
+    fun deleteSkill(path: String) {
+        val paths = serverPaths()
+        if (!SkillWriter.isWritable(path, paths.config, paths.workspace)) {
+            skillError = "Этот скил встроенный — удалить нельзя"
+            return
+        }
+        viewModelScope.launch {
+            skillBusy = true
+            skillError = ""
+            skillStatus = ""
+            runCatching {
+                val file = File(path)
+                if (file.isFile && !file.delete()) error("Не удалось удалить файл")
+                val parent = file.parentFile
+                if (parent != null && parent.list().isNullOrEmpty()) parent.delete()
+                api.reload(baseUrl, password)
+            }.onSuccess {
+                skillStatus = "Скил удалён"
+                loadSkills()
+            }.onFailure { skillError = "Не удалось удалить: ${it.message}" }
+            skillBusy = false
+        }
+    }
+
+    fun loadConfig() {
+        configText = ConfigStore.read(configFilePath())
+        configError = ""
+        configLoaded = true
+    }
+
+    fun saveConfig(text: String) {
+        val error = ConfigStore.validate(text)
+        if (error != null) {
+            configError = error
+            return
+        }
+        viewModelScope.launch {
+            configError = ""
+            runCatching {
+                ConfigStore.write(configFilePath(), text)
+                api.reload(baseUrl, password)
+            }.onSuccess {
+                configText = text
+                statusDetail = "Конфиг сохранён. Сервер перезагружен."
+            }.onFailure { configError = "Не удалось сохранить: ${it.message}" }
+        }
+    }
+
+    fun onMigrationPathChange(value: String) {
+        migrationPath = value
+    }
+
+    fun previewMigration() {
+        val archive = File(migrationPath.trim())
+        if (!archive.isFile) {
+            migrationError = "Архив не найден: ${archive.absolutePath}"
+            migrationPreview = null
+            return
+        }
+        viewModelScope.launch {
+            migrationBusy = true
+            migrationError = ""
+            migrationNotice = ""
+            withContext(Dispatchers.IO) {
+                runCatching { MigrationManager.preview(archive, serverPaths()) }
+            }.onSuccess { preview ->
+                migrationPreview = preview
+                if (preview.problems.isNotEmpty()) {
+                    migrationError = preview.problems.joinToString("\n")
+                }
+            }.onFailure {
+                migrationPreview = null
+                migrationError = "Проверка архива: ${it.message}"
+            }
+            migrationBusy = false
+        }
+    }
+
+    fun importMigration() {
+        val archive = File(migrationPath.trim())
+        if (!archive.isFile) {
+            migrationError = "Архив не найден: ${archive.absolutePath}"
+            return
+        }
+        viewModelScope.launch {
+            migrationBusy = true
+            migrationError = ""
+            migrationNotice = "Останавливаю сервер…"
+            if (settings.mode == ServerMode.EMBEDDED) ServerService.stop(getApplication())
+            delay(400)
+            migrationNotice = "Распаковываю архив…"
+            val paths = serverPaths()
+            val workspace = File(workspacePath.ifBlank { Workspace.defaultPath() })
+            withContext(Dispatchers.IO) {
+                runCatching {
+                    MigrationManager.import(getApplication(), archive, paths, workspace)
+                }
+            }.onSuccess { result ->
+                migrationResult = result
+                migrationPreview = null
+                migrationNotice = "Импортировано: сессий ${result.sessions}, скилов ${result.skills}, ключей ${result.credentials}"
+                if (settings.mode == ServerMode.EMBEDDED) ServerService.start(getApplication())
+            }.onFailure {
+                migrationError = "Импорт: ${it.message}"
+                migrationNotice = ""
+                if (settings.mode == ServerMode.EMBEDDED) ServerService.start(getApplication())
+            }
+            migrationBusy = false
         }
     }
 
@@ -726,6 +1045,8 @@ class PocketViewModel(application: Application) : AndroidViewModel(application) 
         statusDetail = ""
         tab = 0
         input = ""
+        workspacePath = Workspace.defaultPath()
+        onboardingDismissed = false
         projectLoaded = false
         projectFiles = emptyList()
         vcsFiles = emptyList()
@@ -836,6 +1157,7 @@ class PocketViewModel(application: Application) : AndroidViewModel(application) 
         if (type == "provider.updated" || type == "model.updated" ||
             type == "credential.created" || type == "credential.deleted"
         ) {
+            loadProviders()
             refreshModels()
             return
         }
