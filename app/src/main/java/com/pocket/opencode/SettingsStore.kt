@@ -89,6 +89,19 @@ class SettingsStore(context: Context) {
         get() = prefs.getInt("tab", 0)
         set(value) = prefs.edit().putInt("tab", value).apply()
 
+    var mode: ServerMode
+        get() = when (prefs.getString("mode", null)) {
+            "external" -> ServerMode.EXTERNAL
+            else -> ServerMode.EMBEDDED
+        }
+        set(value) = prefs.edit()
+            .putString("mode", if (value == ServerMode.EMBEDDED) "embedded" else "external")
+            .apply()
+
+    var workspacePath: String
+        get() = prefs.getString("workspace_path", "/sdcard/OpenCode").orEmpty()
+        set(value) = prefs.edit().putString("workspace_path", value).apply()
+
     var draft: String
         get() = prefs.getString("draft", "").orEmpty()
         set(value) = prefs.edit().putString("draft", value).apply()
