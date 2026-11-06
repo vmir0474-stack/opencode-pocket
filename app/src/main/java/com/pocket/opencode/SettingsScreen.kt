@@ -58,7 +58,6 @@ fun SettingsScreen(vm: PocketViewModel) {
                 Text("Связь", color = TextMain, fontSize = 22.sp, fontWeight = FontWeight.Bold)
                 Text("OpenCode Server API v2", color = Muted, fontSize = 11.5.sp)
             }
-            StatusPill(vm.statusLabel, statusTone(vm.status))
         }
 
         Panel {
