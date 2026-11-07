@@ -123,7 +123,24 @@ object EmbeddedServer {
         // иначе первый /api/skill не увидит встроенный набор.
         runCatching { SkillSeeder.seed(context, paths) }
 
-        val bin = File(context.applicationInfo.nativeLibraryDir, "libocserver.so")
+        // ripgrep для grep/glob: symlink в app-owned каталоге на ELF из
+        // nativeLibraryDir (exec из app-data запрещён начиная с API 29).
+        val tools = runCatching { Toolchain.ensure(context, paths) }.getOrElse {
+            Toolchain.Status(Toolchain.toolsDir(paths), error = it.message ?: it.toString())
+        }
+        DebugLog.event(
+            "toolchain",
+            if (tools.ok) "rg ready" else "rg unavailable",
+            buildMap {
+                put("dir", tools.dir.absolutePath)
+                tools.rg?.let { put("rg", it.absolutePath) }
+                if (tools.version.isNotBlank()) put("version", tools.version.lineSequence().first())
+                if (tools.error.isNotBlank()) put("error", tools.error)
+            },
+        )
+
+        val nativeDir = File(context.applicationInfo.nativeLibraryDir)
+        val bin = File(nativeDir, "libocserver.so")
         if (!bin.isFile) {
             fail(gen, "Не найден встроенный сервер: ${bin.absolutePath}")
             return
@@ -149,7 +166,7 @@ object EmbeddedServer {
             builder.redirectErrorStream(true)
             // Наследуем системное окружение (ANDROID_ROOT и т.п.) и
             // перекрываем только то, что относится к OpenCode.
-            builder.environment().putAll(ServerEnv.build(paths))
+            builder.environment().putAll(ServerEnv.build(paths, tools.dir, nativeDir))
             val started = builder.start()
             proc = started
             synchronized(lock) {

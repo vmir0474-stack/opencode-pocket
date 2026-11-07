@@ -45,8 +45,11 @@ data class ModelChoice(
     val name: String,
     val variants: List<String>,
     val status: String,
-    val enabled: Boolean
-)
+    val enabled: Boolean,
+    val inputs: List<String> = emptyList(),
+) {
+    val supportsImages: Boolean get() = inputs.contains("image")
+}
 
 data class AgentChoice(
     val id: String,
@@ -55,6 +58,16 @@ data class AgentChoice(
     val mode: String,
     val hidden: Boolean
 )
+
+data class McpInfo(
+    val name: String,
+    val title: String = "",
+    val status: String = "pending",
+    val error: String = "",
+    val integrationID: String = "",
+) {
+    val connected: Boolean get() = status == "connected"
+}
 
 data class PermissionAsk(
     val id: String,
@@ -157,6 +170,21 @@ sealed interface UiBlock {
         val output: String = "",
         val exit: Int? = null
     ) : UiBlock
+
+    /** Картинка, приложенная пользователем (uri — file:// или data:). */
+    data class Image(
+        val uri: String,
+        val name: String = ""
+    ) : UiBlock
+}
+
+/** Локальное вложение, готовое к отправке в prompt. */
+data class Attachment(
+    val uri: String,
+    val name: String,
+    val mime: String = "image/jpeg"
+) {
+    val path: String get() = uri.removePrefix("file://")
 }
 
 data class UiMessage(
@@ -246,11 +274,28 @@ fun parseSession(raw: JSONObject): SessionInfo {
     )
 }
 
+private val imageExtensions = setOf("png", "jpg", "jpeg", "webp", "gif", "avif", "heic", "heif")
+
+fun isImageAttachment(uri: String, mime: String = "", name: String = ""): Boolean {
+    if (mime.startsWith("image/")) return true
+    if (uri.startsWith("data:image/")) return true
+    val ext = (name.ifBlank { uri.substringBefore('?') })
+        .substringAfterLast('.', "")
+        .lowercase()
+    return ext in imageExtensions
+}
+
 fun parseModel(raw: JSONObject): ModelChoice {
     val variants = mutableListOf<String>()
     raw.optJSONArray("variants")?.let { arr ->
         for (i in 0 until arr.length()) {
             arr.optJSONObject(i)?.optString("id")?.takeIf { it.isNotBlank() }?.let { variants += it }
+        }
+    }
+    val inputs = mutableListOf<String>()
+    raw.optJSONObject("capabilities")?.optJSONArray("input")?.let { arr ->
+        for (i in 0 until arr.length()) {
+            arr.optString(i).takeIf { it.isNotBlank() }?.let { inputs += it }
         }
     }
     return ModelChoice(
@@ -259,7 +304,8 @@ fun parseModel(raw: JSONObject): ModelChoice {
         name = raw.optString("name").ifBlank { raw.optString("modelID") },
         variants = variants,
         status = raw.optString("status", "active"),
-        enabled = raw.optBoolean("enabled", true)
+        enabled = raw.optBoolean("enabled", true),
+        inputs = inputs
     )
 }
 
@@ -270,6 +316,17 @@ fun parseAgent(raw: JSONObject): AgentChoice = AgentChoice(
     mode = raw.optString("mode", "primary"),
     hidden = raw.optBoolean("hidden", false)
 )
+
+fun parseMcp(raw: JSONObject): McpInfo {
+    val status = raw.optJSONObject("status")
+    return McpInfo(
+        name = raw.optString("name"),
+        title = raw.optString("title"),
+        status = status?.optString("status", "pending") ?: "pending",
+        error = status?.optString("error").orEmpty(),
+        integrationID = raw.optString("integrationID")
+    )
+}
 
 fun parsePermission(raw: JSONObject): PermissionAsk {
     val resources = mutableListOf<String>()
@@ -364,12 +421,31 @@ fun parseServerMessages(data: JSONArray): List<UiMessage> {
         val id = raw.optString("id")
         val time = raw.optJSONObject("time")?.optLong("created") ?: 0L
         when (raw.optString("type")) {
-            "user" -> out += UiMessage(
-                id = id,
-                role = UiRole.USER,
-                blocks = listOf(UiBlock.Text(content = raw.optString("text"))),
-                createdAt = time
-            )
+            "user" -> {
+                val blocks = mutableListOf<UiBlock>()
+                raw.optString("text").takeIf { it.isNotBlank() }?.let {
+                    blocks += UiBlock.Text(content = it)
+                }
+                raw.optJSONArray("files")?.let { files ->
+                    for (j in 0 until files.length()) {
+                        val file = files.optJSONObject(j) ?: continue
+                        val uri = file.optJSONObject("source")?.optString("uri").orEmpty()
+                            .ifBlank { file.optString("uri") }
+                        if (uri.isBlank()) continue
+                        val mime = file.optString("mime")
+                        val name = file.optString("name")
+                        if (isImageAttachment(uri, mime, name)) {
+                            blocks += UiBlock.Image(uri, name)
+                        }
+                    }
+                }
+                out += UiMessage(
+                    id = id,
+                    role = UiRole.USER,
+                    blocks = blocks,
+                    createdAt = time
+                )
+            }
 
             "assistant" -> {
                 val blocks = mutableListOf<UiBlock>()
@@ -498,6 +574,11 @@ fun UiMessage.toCacheJson(): JSONObject {
                 b.put("output", block.output)
                 block.exit?.let { b.put("exit", it) }
             }
+            is UiBlock.Image -> {
+                b.put("type", "image")
+                b.put("uri", block.uri)
+                b.put("name", block.name)
+            }
         }
         arr.put(b)
     }
@@ -546,6 +627,11 @@ fun cacheFromJson(raw: String): List<UiMessage> {
                     status = b.optString("status"),
                     output = b.optString("output"),
                     exit = if (b.has("exit")) b.optInt("exit") else null
+                )
+
+                "image" -> blocks += UiBlock.Image(
+                    uri = b.optString("uri"),
+                    name = b.optString("name")
                 )
             }
         }

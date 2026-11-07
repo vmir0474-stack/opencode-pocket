@@ -12,8 +12,8 @@ android {
         applicationId = "com.pocket.opencode"
         minSdk = 26
         targetSdk = 35
-        versionCode = 3
-        versionName = "0.3.0"
+        versionCode = 4
+        versionName = "0.4.0"
     }
 
     buildFeatures { compose = true }
@@ -25,8 +25,16 @@ android {
             // Спайк: нативный бинарник должен попасть в nativeLibraryDir
             // и быть исполняемым, поэтому упаковываем legacy-способом.
             useLegacyPackaging = true
+            // librg.so — это ELF-бинарник ripgrep под именем .so; strip
+            // ему не нужен и может повредить образ.
             keepDebugSymbols += "**/libocserver.so"
+            keepDebugSymbols += "**/librg.so"
         }
+    }
+
+    sourceSets {
+        // ripgrep и libpcre2-8.so пакуются как обычные jniLibs.
+        getByName("main").jniLibs.srcDir("src/main/tools")
     }
 
     compileOptions {

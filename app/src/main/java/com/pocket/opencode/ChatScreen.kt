@@ -1,6 +1,10 @@
 package com.pocket.opencode
 
+import android.graphics.Bitmap
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -12,6 +16,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -30,7 +35,9 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.AddPhotoAlternate
 import androidx.compose.material.icons.filled.Clear
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.Send
@@ -51,6 +58,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -60,7 +68,10 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
@@ -68,7 +79,9 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import org.json.JSONObject
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -360,6 +373,11 @@ private fun EmptyChatState(vm: PocketViewModel) {
 
 @Composable
 private fun Composer(vm: PocketViewModel) {
+    val picker = rememberLauncherForActivityResult(
+        ActivityResultContracts.GetMultipleContents()
+    ) { uris -> vm.attachImages(uris) }
+    val model = vm.selectedModelChoice
+    val imagesBlocked = vm.attachments.isNotEmpty() && model != null && !model.supportsImages
     Column(
         Modifier
             .fillMaxWidth()
@@ -372,50 +390,166 @@ private fun Composer(vm: PocketViewModel) {
             border = BorderStroke(1.dp, Line.copy(alpha = 0.85f)),
             shadowElevation = 8.dp
         ) {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(start = 8.dp, end = 6.dp, top = 4.dp, bottom = 4.dp),
-                verticalAlignment = Alignment.Bottom
-            ) {
-                OutlinedTextField(
-                    value = vm.input,
-                    onValueChange = vm::onInputChange,
-                    modifier = Modifier.weight(1f),
-                    placeholder = {
-                        Text(
-                            if (vm.status == ConnState.CONNECTED) "Задача агенту…" else "Нет связи с сервером",
-                            color = Dim,
-                            fontSize = 13.sp
+            Column {
+                AttachmentStrip(vm, imagesBlocked, model?.name)
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(start = 6.dp, end = 6.dp, top = 4.dp, bottom = 4.dp),
+                    verticalAlignment = Alignment.Bottom
+                ) {
+                    AttachButton(
+                        enabled = vm.status == ConnState.CONNECTED &&
+                            !vm.attachmentBusy && vm.attachments.size < 6
+                    ) { picker.launch("image/*") }
+                    OutlinedTextField(
+                        value = vm.input,
+                        onValueChange = vm::onInputChange,
+                        modifier = Modifier.weight(1f),
+                        placeholder = {
+                            Text(
+                                if (vm.status == ConnState.CONNECTED) "Задача агенту…" else "Нет связи с сервером",
+                                color = Dim,
+                                fontSize = 13.sp
+                            )
+                        },
+                        textStyle = androidx.compose.ui.text.TextStyle(
+                            color = TextMain,
+                            fontSize = 14.sp,
+                            lineHeight = 20.sp
+                        ),
+                        maxLines = 6,
+                        shape = RoundedCornerShape(20.dp),
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor = Color.Transparent,
+                            unfocusedBorderColor = Color.Transparent,
+                            focusedContainerColor = Color.Transparent,
+                            unfocusedContainerColor = Color.Transparent,
+                            cursorColor = Accent,
+                            focusedTextColor = TextMain,
+                            unfocusedTextColor = TextMain
                         )
-                    },
-                    textStyle = androidx.compose.ui.text.TextStyle(
-                        color = TextMain,
-                        fontSize = 14.sp,
-                        lineHeight = 20.sp
-                    ),
-                    maxLines = 6,
-                    shape = RoundedCornerShape(20.dp),
-                    colors = OutlinedTextFieldDefaults.colors(
-                        focusedBorderColor = Color.Transparent,
-                        unfocusedBorderColor = Color.Transparent,
-                        focusedContainerColor = Color.Transparent,
-                        unfocusedContainerColor = Color.Transparent,
-                        cursorColor = Accent,
-                        focusedTextColor = TextMain,
-                        unfocusedTextColor = TextMain
                     )
-                )
-                Spacer(Modifier.width(6.dp))
-                if (vm.running) {
-                    StopButton { vm.interrupt() }
-                } else {
-                    val enabled = vm.input.isNotBlank() && vm.status == ConnState.CONNECTED && !vm.busy
-                    SendButton(enabled) { vm.send() }
+                    Spacer(Modifier.width(6.dp))
+                    if (vm.running) {
+                        StopButton { vm.interrupt() }
+                    } else {
+                        val enabled = (vm.input.isNotBlank() || vm.attachments.isNotEmpty()) &&
+                            vm.status == ConnState.CONNECTED && !vm.busy && !vm.attachmentBusy
+                        SendButton(enabled) { vm.send() }
+                    }
                 }
             }
         }
     }
+}
+
+@Composable
+private fun AttachmentStrip(vm: PocketViewModel, blocked: Boolean, modelName: String?) {
+    val hasNote = vm.attachmentNote.isNotBlank() || blocked || vm.attachmentBusy
+    if (vm.attachments.isEmpty() && !hasNote) return
+    Column(Modifier.fillMaxWidth()) {
+        if (vm.attachments.isNotEmpty()) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .horizontalScroll(rememberScrollState())
+                    .padding(start = 10.dp, end = 10.dp, top = 10.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                vm.attachments.forEach { attachment ->
+                    AttachmentThumb(attachment) { vm.removeAttachment(attachment.uri) }
+                }
+            }
+        }
+        val note = when {
+            vm.attachmentBusy -> "готовлю изображение…"
+            vm.attachmentNote.isNotBlank() -> vm.attachmentNote
+            blocked -> "${modelName ?: "Модель"} не принимает изображения"
+            else -> ""
+        }
+        if (note.isNotBlank()) {
+            Text(
+                note,
+                color = if (blocked || vm.attachmentNote.isNotBlank()) Danger else Muted,
+                fontSize = 10.5.sp,
+                modifier = Modifier.padding(start = 14.dp, end = 14.dp, top = 6.dp, bottom = 2.dp)
+            )
+        }
+    }
+}
+
+@Composable
+private fun AttachmentThumb(attachment: Attachment, onRemove: () -> Unit) {
+    val bitmap = rememberBitmap(attachment.uri, 240)
+    Box(Modifier.size(64.dp)) {
+        Box(
+            Modifier
+                .fillMaxSize()
+                .clip(RoundedCornerShape(14.dp))
+                .background(Card)
+                .border(1.dp, Line, RoundedCornerShape(14.dp)),
+            contentAlignment = Alignment.Center
+        ) {
+            if (bitmap != null) {
+                Image(
+                    bitmap.asImageBitmap(),
+                    contentDescription = attachment.name,
+                    contentScale = ContentScale.Crop,
+                    modifier = Modifier.fillMaxSize()
+                )
+            } else {
+                Icon(Icons.Default.AddPhotoAlternate, null, tint = Dim, modifier = Modifier.size(20.dp))
+            }
+        }
+        Box(
+            modifier = Modifier
+                .align(Alignment.TopEnd)
+                .padding(2.dp)
+                .size(20.dp)
+                .clip(CircleShape)
+                .background(Color(0xCC1B1530))
+                .clickable(onClick = onRemove),
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(
+                Icons.Default.Close,
+                contentDescription = "Убрать",
+                tint = TextMain,
+                modifier = Modifier.size(12.dp)
+            )
+        }
+    }
+}
+
+@Composable
+private fun AttachButton(enabled: Boolean, onClick: () -> Unit) {
+    Box(
+        modifier = Modifier
+            .size(44.dp)
+            .clip(RoundedCornerShape(15.dp))
+            .background(if (enabled) Card else Color.Transparent)
+            .clickable(enabled = enabled, onClick = onClick),
+        contentAlignment = Alignment.Center
+    ) {
+        Icon(
+            Icons.Default.AddPhotoAlternate,
+            contentDescription = "Прикрепить изображение",
+            tint = if (enabled) Accent else Dim,
+            modifier = Modifier.size(20.dp)
+        )
+    }
+}
+
+@Composable
+private fun rememberBitmap(uri: String, maxSide: Int = 1200): Bitmap? {
+    val context = LocalContext.current
+    val bitmap by produceState<Bitmap?>(initialValue = null, uri, maxSide) {
+        value = withContext(Dispatchers.IO) {
+            runCatching { AttachmentStore.decode(context, uri, maxSide) }.getOrNull()
+        }
+    }
+    return bitmap
 }
 
 @Composable
@@ -470,30 +604,48 @@ private fun MessageItem(message: UiMessage, live: Boolean) {
 private fun UserBubble(message: UiMessage) {
     val text = message.blocks.filterIsInstance<UiBlock.Text>()
         .joinToString("\n") { it.content }
+    val images = message.blocks.filterIsInstance<UiBlock.Image>()
     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
-        Column(Modifier.widthIn(max = 340.dp)) {
-            Box(
-                Modifier
-                    .clip(RoundedCornerShape(18.dp, 18.dp, 6.dp, 18.dp))
-                    .background(
-                        Brush.linearGradient(
-                            listOf(Color(0xFF6E52E8), Color(0xFF4A2FAF))
+        Column(Modifier.widthIn(max = 340.dp), horizontalAlignment = Alignment.End) {
+            images.forEach { image ->
+                val bitmap = rememberBitmap(image.uri, 900)
+                if (bitmap != null) {
+                    Image(
+                        bitmap.asImageBitmap(),
+                        contentDescription = image.name.ifBlank { "Изображение" },
+                        contentScale = ContentScale.FillWidth,
+                        modifier = Modifier
+                            .padding(bottom = 6.dp)
+                            .widthIn(max = 280.dp)
+                            .clip(RoundedCornerShape(16.dp))
+                            .border(1.dp, Color.White.copy(alpha = 0.10f), RoundedCornerShape(16.dp))
+                    )
+                }
+            }
+            if (text.isNotBlank()) {
+                Box(
+                    Modifier
+                        .clip(RoundedCornerShape(18.dp, 18.dp, 6.dp, 18.dp))
+                        .background(
+                            Brush.linearGradient(
+                                listOf(Color(0xFF6E52E8), Color(0xFF4A2FAF))
+                            )
                         )
-                    )
-                    .border(
-                        1.dp,
-                        Color.White.copy(alpha = 0.10f),
-                        RoundedCornerShape(18.dp, 18.dp, 6.dp, 18.dp)
-                    )
-            ) {
-                SelectionContainer {
-                    Text(
-                        text,
-                        color = TextMain,
-                        fontSize = 14.sp,
-                        lineHeight = 20.sp,
-                        modifier = Modifier.padding(horizontal = 14.dp, vertical = 11.dp)
-                    )
+                        .border(
+                            1.dp,
+                            Color.White.copy(alpha = 0.10f),
+                            RoundedCornerShape(18.dp, 18.dp, 6.dp, 18.dp)
+                        )
+                ) {
+                    SelectionContainer {
+                        Text(
+                            text,
+                            color = TextMain,
+                            fontSize = 14.sp,
+                            lineHeight = 20.sp,
+                            modifier = Modifier.padding(horizontal = 14.dp, vertical = 11.dp)
+                        )
+                    }
                 }
             }
             Text(
@@ -588,6 +740,19 @@ private fun BlockView(block: UiBlock, live: Boolean) {
         is UiBlock.Reasoning -> ReasoningBlock(block, live)
         is UiBlock.Tool -> ToolBlock(block)
         is UiBlock.Shell -> ShellBlock(block)
+        is UiBlock.Image -> {
+            val bitmap = rememberBitmap(block.uri, 900)
+            if (bitmap != null) {
+                Image(
+                    bitmap.asImageBitmap(),
+                    contentDescription = block.name.ifBlank { "Изображение" },
+                    contentScale = ContentScale.FillWidth,
+                    modifier = Modifier
+                        .widthIn(max = 300.dp)
+                        .clip(RoundedCornerShape(14.dp))
+                )
+            }
+        }
     }
 }
 

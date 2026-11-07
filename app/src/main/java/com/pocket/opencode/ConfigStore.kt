@@ -4,6 +4,9 @@ import org.json.JSONObject
 import java.io.File
 
 object ConfigStore {
+    const val FILE_NAME = "opencode.json"
+    const val LEGACY_FILE_NAME = "config.json"
+
     fun validate(text: String): String? {
         val trimmed = text.trim()
         if (trimmed.isEmpty()) return "Конфиг пуст"

@@ -272,6 +272,19 @@ fun ModelsSheet(vm: PocketViewModel, onDismiss: () -> Unit) {
                                         overflow = TextOverflow.Ellipsis
                                     )
                                 }
+                                if (model.supportsImages) {
+                                    Text(
+                                        "vision",
+                                        color = Accent,
+                                        fontSize = 9.sp,
+                                        fontWeight = FontWeight.SemiBold,
+                                        modifier = Modifier
+                                            .clip(RoundedCornerShape(6.dp))
+                                            .background(AccentDim)
+                                            .padding(horizontal = 6.dp, vertical = 2.dp)
+                                    )
+                                    Spacer(Modifier.width(8.dp))
+                                }
                                 if (model.variants.isNotEmpty()) {
                                     Text(
                                         "${model.variants.size} вар.",

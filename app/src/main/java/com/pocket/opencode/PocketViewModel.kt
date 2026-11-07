@@ -1,6 +1,7 @@
 package com.pocket.opencode
 
 import android.app.Application
+import android.net.Uri
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -84,6 +85,11 @@ class PocketViewModel(application: Application) : AndroidViewModel(application) 
     var skillError by mutableStateOf("")
     var skillStatus by mutableStateOf("")
 
+    var mcpServers by mutableStateOf<List<McpInfo>>(emptyList())
+    var mcpBusy by mutableStateOf(false)
+    var mcpError by mutableStateOf("")
+    var mcpStatus by mutableStateOf("")
+
     var configText by mutableStateOf("")
     var configError by mutableStateOf("")
     var configLoaded by mutableStateOf(false)
@@ -102,6 +108,9 @@ class PocketViewModel(application: Application) : AndroidViewModel(application) 
     var permissions by mutableStateOf<List<PermissionAsk>>(emptyList())
     var forms by mutableStateOf<List<FormSpec>>(emptyList())
     var input by mutableStateOf(settings.draft)
+    var attachments by mutableStateOf<List<Attachment>>(emptyList())
+    var attachmentBusy by mutableStateOf(false)
+    var attachmentNote by mutableStateOf("")
 
     private var connectionJob: Job? = null
     private var refreshJob: Job? = null
@@ -284,6 +293,11 @@ class PocketViewModel(application: Application) : AndroidViewModel(application) 
                 JSONObject().put("ok", true).put("action", name)
             }
 
+            "mcp" -> {
+                loadMcp()
+                JSONObject().put("ok", true).put("action", name)
+            }
+
             "config" -> {
                 viewModelScope.launch { loadConfig() }
                 JSONObject().put("ok", true).put("action", name)
@@ -432,6 +446,37 @@ class PocketViewModel(application: Application) : AndroidViewModel(application) 
         queueSave()
     }
 
+    fun attachImages(uris: List<Uri>) {
+        if (uris.isEmpty() || attachmentBusy) return
+        viewModelScope.launch {
+            attachmentBusy = true
+            attachmentNote = ""
+            val paths = serverPaths()
+            val app = getApplication<Application>()
+            val imported = withContext(Dispatchers.IO) {
+                uris.take(6).mapNotNull { uri ->
+                    runCatching { AttachmentStore.import(app, paths, uri) }
+                        .onFailure { DebugLog.error("attachment", it) }
+                        .getOrNull()
+                }
+            }
+            attachments = (attachments + imported).distinctBy { it.uri }.take(6)
+            if (imported.isEmpty()) attachmentNote = "Не удалось прочитать изображение"
+            attachmentBusy = false
+        }
+    }
+
+    fun removeAttachment(uri: String) {
+        attachments = attachments.filterNot { it.uri == uri }
+        runCatching { File(uri.removePrefix("file://")).delete() }
+    }
+
+    fun clearAttachments() {
+        attachments.forEach { runCatching { File(it.path).delete() } }
+        attachments = emptyList()
+        attachmentNote = ""
+    }
+
     fun selectTab(value: Int) {
         tab = value
         settings.tab = value
@@ -525,8 +570,12 @@ class PocketViewModel(application: Application) : AndroidViewModel(application) 
             .onSuccess { skills = it }
             .onFailure { failed++ }
 
+        runCatching { api.mcpServers(baseUrl, password) }
+            .onSuccess { mcpServers = it }
+            .onFailure { failed++ }
+
         if (!configLoaded) {
-            configText = withContext(Dispatchers.IO) { ConfigStore.read(configFilePath()) }
+            configText = withContext(Dispatchers.IO) { ConfigStore.read(configReadPath()) }
             configLoaded = true
         }
 
@@ -654,7 +703,16 @@ class PocketViewModel(application: Application) : AndroidViewModel(application) 
         File(workspacePath.ifBlank { Workspace.defaultPath() })
     )
 
-    fun configFilePath(): File = File(serverPaths().config, "opencode/config.json")
+    fun configFilePath(): File =
+        File(serverPaths().config, "opencode/${ConfigStore.FILE_NAME}")
+
+    /** Пока opencode.json нет, показываем старый config.json — при сохранении он переедет. */
+    private fun configReadPath(): File {
+        val primary = configFilePath()
+        if (primary.isFile) return primary
+        val legacy = File(primary.parentFile, ConfigStore.LEGACY_FILE_NAME)
+        return if (legacy.isFile) legacy else primary
+    }
 
     fun isSkillWritable(path: String): Boolean {
         val paths = serverPaths()
@@ -670,6 +728,122 @@ class PocketViewModel(application: Application) : AndroidViewModel(application) 
                 .onSuccess { skills = it }
                 .onFailure { skillError = "Скилы: ${it.message}" }
             skillBusy = false
+        }
+    }
+
+    fun loadMcp() {
+        if (status != ConnState.CONNECTED) return
+        viewModelScope.launch {
+            mcpBusy = true
+            mcpError = ""
+            runCatching { api.mcpServers(baseUrl, password) }
+                .onSuccess { mcpServers = it }
+                .onFailure { mcpError = "MCP: ${it.message}" }
+            mcpBusy = false
+        }
+    }
+
+    fun addRemoteMcp(name: String, url: String) {
+        val cleanName = name.trim().lowercase().replace(Regex("[^a-z0-9_-]"), "-")
+        val cleanUrl = url.trim()
+        when {
+            cleanName.isBlank() -> {
+                mcpError = "Нужно имя сервера"
+                return
+            }
+            !cleanUrl.startsWith("http://") && !cleanUrl.startsWith("https://") -> {
+                mcpError = "URL должен начинаться с http:// или https://"
+                return
+            }
+        }
+        viewModelScope.launch {
+            mcpBusy = true
+            mcpError = ""
+            mcpStatus = ""
+            // Сначала конфиг: runtime API живёт до перезапуска процесса.
+            val persisted = withContext(Dispatchers.IO) {
+                runCatching {
+                    val file = configFilePath()
+                    val merged = McpConfig.merge(ConfigStore.read(file), cleanName, cleanUrl)
+                        ?: return@runCatching false
+                    ConfigStore.write(file, merged)
+                    if (configLoaded) configText = merged
+                    true
+                }.getOrElse {
+                    DebugLog.error("mcp", it)
+                    false
+                }
+            }
+            runCatching {
+                api.addRemoteMcp(baseUrl, password, cleanName, cleanUrl)
+                // PUT обычно сразу поднимает соединение; connect нужен,
+                // если сервер остался в pending.
+                val after = runCatching { api.mcpServers(baseUrl, password) }
+                    .getOrDefault(emptyList())
+                if (after.firstOrNull { it.name == cleanName }?.connected != true) {
+                    runCatching { api.connectMcp(baseUrl, password, cleanName, true) }
+                    delay(600)
+                }
+                api.mcpServers(baseUrl, password)
+            }.onSuccess { list ->
+                mcpServers = list
+                mcpStatus = if (persisted) {
+                    "Сервер $cleanName добавлен"
+                } else {
+                    "Сервер $cleanName подключён, но не сохранён в opencode.json"
+                }
+            }.onFailure { mcpError = "Не удалось добавить: ${it.message}" }
+            mcpBusy = false
+        }
+    }
+
+    fun addMcpPreset(name: String) {
+        val url = when (name) {
+            "context7" -> "https://mcp.context7.com/mcp"
+            "deepwiki" -> "https://mcp.deepwiki.com/mcp"
+            else -> return
+        }
+        addRemoteMcp(name, url)
+    }
+
+    fun removeMcp(name: String) {
+        viewModelScope.launch {
+            mcpBusy = true
+            mcpError = ""
+            mcpStatus = ""
+            runCatching { api.removeMcp(baseUrl, password, name) }
+                .onSuccess {
+                    mcpServers = mcpServers.filterNot { it.name == name }
+                    mcpStatus = "Сервер $name удалён"
+                    withContext(Dispatchers.IO) {
+                        runCatching {
+                            val file = configFilePath()
+                            val text = ConfigStore.read(file)
+                            McpConfig.remove(text, name)?.let {
+                                ConfigStore.write(file, it)
+                                if (configLoaded) configText = it
+                            }
+                        }.onFailure { DebugLog.error("mcp", it) }
+                    }
+                }
+                .onFailure { mcpError = "Не удалось удалить: ${it.message}" }
+            mcpBusy = false
+        }
+    }
+
+    fun toggleMcp(server: McpInfo) {
+        viewModelScope.launch {
+            mcpBusy = true
+            mcpError = ""
+            mcpStatus = ""
+            runCatching {
+                api.connectMcp(baseUrl, password, server.name, !server.connected)
+                // Статус меняется асинхронно — даём серверу мгновение.
+                delay(600)
+                api.mcpServers(baseUrl, password)
+            }.onSuccess { mcpServers = it }
+                .onFailure { mcpError = "MCP: ${it.message}" }
+            mcpBusy = false
         }
     }
 
@@ -727,7 +901,7 @@ class PocketViewModel(application: Application) : AndroidViewModel(application) 
     }
 
     fun loadConfig() {
-        configText = ConfigStore.read(configFilePath())
+        configText = ConfigStore.read(configReadPath())
         configError = ""
         configLoaded = true
     }
@@ -901,7 +1075,8 @@ class PocketViewModel(application: Application) : AndroidViewModel(application) 
                     password,
                     newSessionTitle(),
                     selectedAgent,
-                    selectedModelRef()
+                    selectedModelRef(),
+                    newSessionDirectory()
                 )
             }.onSuccess { info ->
                 applyNewSession(info)
@@ -966,28 +1141,49 @@ class PocketViewModel(application: Application) : AndroidViewModel(application) 
 
     fun send() {
         val text = input.trim()
-        if (text.isEmpty()) return
+        val files = attachments
+        if (text.isEmpty() && files.isEmpty()) return
         if (status != ConnState.CONNECTED) {
             statusDetail = "Нет соединения с сервером. Проверь адрес и пароль."
             return
         }
         if (busy) return
+        if (files.isNotEmpty()) {
+            val model = selectedModelChoice
+            if (model != null && !model.supportsImages) {
+                attachmentNote =
+                    "${model.name} не принимает изображения — выбери модель с бейджем vision"
+                return
+            }
+        }
         input = ""
         settings.draft = ""
+        attachmentNote = ""
         viewModelScope.launch {
             busy = true
             try {
-                val sid = ensureSession(text) ?: return@launch
+                val sid = ensureSession(text.ifBlank { files.firstOrNull()?.name ?: "Изображение" })
+                    ?: return@launch
                 val localID = "local_${UUID.randomUUID()}"
+                val blocks = buildList {
+                    if (text.isNotBlank()) add(UiBlock.Text(content = text))
+                    files.forEach { add(UiBlock.Image(uri = it.uri, name = it.name)) }
+                }
                 messages = messages + UiMessage(
                     id = localID,
                     role = UiRole.USER,
-                    blocks = listOf(UiBlock.Text(content = text))
+                    blocks = blocks
                 )
                 running = true
                 statusDetail = ""
                 cacheSoon()
-                runCatching { api.prompt(baseUrl, password, sid, text) }
+                val promptFiles = files.map { PromptFile(it.uri, it.name) }
+                runCatching { api.prompt(baseUrl, password, sid, text, promptFiles) }
+                    .onSuccess {
+                        // Файлы на диске не удаляем: сервер читает их
+                        // асинхронно уже после ответа API. Кэш чистится сам.
+                        attachments = emptyList()
+                    }
                     .onFailure { error ->
                         messages = messages + UiMessage(
                             id = "error_${UUID.randomUUID()}",
@@ -1015,7 +1211,8 @@ class PocketViewModel(application: Application) : AndroidViewModel(application) 
                 password,
                 firstText.take(60),
                 selectedAgent,
-                selectedModelRef()
+                selectedModelRef(),
+                newSessionDirectory()
             )
         }.getOrElse {
             statusDetail = "Не удалось создать сессию: ${it.message}"
@@ -1024,6 +1221,10 @@ class PocketViewModel(application: Application) : AndroidViewModel(application) 
         applyNewSession(info)
         return info.id
     }
+
+    /** Встроенный сервер знает свой реальный workspace, внешнему не навязываем. */
+    private fun newSessionDirectory(): String? =
+        if (isEmbedded) serverStatus.workspace.takeIf { it.isNotBlank() } else null
 
     fun interrupt() {
         val sid = sessionId ?: return

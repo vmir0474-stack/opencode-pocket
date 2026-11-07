@@ -20,6 +20,9 @@ import java.util.concurrent.TimeUnit
 class ApiException(val code: Int, body: String) :
     IOException("HTTP $code: ${body.take(500)}")
 
+/** Файл для prompt: сервер читает file:// uri и сам кодирует его. */
+data class PromptFile(val uri: String, val name: String? = null)
+
 class OpenCodeApi {
     private val client = OkHttpClient.Builder()
         .connectTimeout(8, TimeUnit.SECONDS)
@@ -143,19 +146,38 @@ class OpenCodeApi {
         password: String,
         title: String?,
         agent: String?,
-        model: ModelRef?
+        model: ModelRef?,
+        directory: String? = null
     ): SessionInfo {
         val body = JSONObject()
         title?.takeIf { it.isNotBlank() }?.let { body.put("title", it) }
         agent?.takeIf { it.isNotBlank() }?.let { body.put("agent", it) }
         model?.let { body.put("model", modelJson(it)) }
+        directory?.takeIf { it.isNotBlank() }?.let {
+            body.put("location", JSONObject().put("directory", it))
+        }
         val raw = call(post("${root(base)}/api/session", password, body))
         val data = JSONObject(raw).optJSONObject("data") ?: JSONObject()
         return parseSession(data)
     }
 
-    suspend fun prompt(base: String, password: String, sessionID: String, text: String) {
+    suspend fun prompt(
+        base: String,
+        password: String,
+        sessionID: String,
+        text: String,
+        files: List<PromptFile> = emptyList()
+    ) {
         val body = JSONObject().put("text", text).put("delivery", "steer")
+        if (files.isNotEmpty()) {
+            val arr = JSONArray()
+            files.forEach { file ->
+                val item = JSONObject().put("uri", file.uri)
+                file.name?.takeIf { it.isNotBlank() }?.let { item.put("name", it) }
+                arr.put(item)
+            }
+            body.put("files", arr)
+        }
         call(post("${root(base)}/api/session/$sessionID/prompt", password, body))
     }
 
@@ -394,6 +416,49 @@ class OpenCodeApi {
         for (i in 0 until arr.length()) arr.optJSONObject(i)?.let { out += parseSkill(it) }
         return out
     }
+
+    suspend fun mcpServers(base: String, password: String): List<McpInfo> {
+        val raw = call(request("${root(base)}/api/mcp", password).get().build())
+        val arr = JSONObject(raw).optJSONArray("data") ?: return emptyList()
+        val out = mutableListOf<McpInfo>()
+        for (i in 0 until arr.length()) arr.optJSONObject(i)?.let { out += parseMcp(it) }
+        return out
+    }
+
+    suspend fun addRemoteMcp(base: String, password: String, name: String, url: String) {
+        val body = JSONObject().put(
+            "config",
+            JSONObject().put("type", "remote").put("url", url)
+        )
+        call(
+            request(
+                "${root(base)}/api/experimental/mcp/${mcpPath(name)}",
+                password
+            ).put(body.toString().toRequestBody(jsonType)).build()
+        )
+    }
+
+    suspend fun removeMcp(base: String, password: String, name: String) {
+        call(
+            request(
+                "${root(base)}/api/experimental/mcp/${mcpPath(name)}",
+                password
+            ).delete().build()
+        )
+    }
+
+    suspend fun connectMcp(base: String, password: String, name: String, connect: Boolean) {
+        val suffix = if (connect) "connect" else "disconnect"
+        call(
+            request(
+                "${root(base)}/api/experimental/mcp/${mcpPath(name)}/$suffix",
+                password
+            ).post("{}".toRequestBody(jsonType)).build()
+        )
+    }
+
+    private fun mcpPath(name: String): String =
+        java.net.URLEncoder.encode(name, "UTF-8").replace("+", "%20")
 
     suspend fun reload(base: String, password: String) {
         call(

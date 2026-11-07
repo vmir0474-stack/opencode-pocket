@@ -24,6 +24,7 @@ import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -65,6 +66,7 @@ fun SettingsScreen(vm: PocketViewModel) {
         WorkspacePanel(vm)
         QuotaPanel(vm)
         MigrationPanel(vm)
+        McpPanel(vm)
 
         Panel {
             SectionTitle("Конфиг OpenCode") {
@@ -100,7 +102,7 @@ fun SettingsScreen(vm: PocketViewModel) {
                     modifier = Modifier
                         .fillMaxWidth()
                         .height(220.dp),
-                    label = { Text("config.json", color = Muted, fontSize = 11.sp) },
+                    label = { Text("opencode.json", color = Muted, fontSize = 11.sp) },
                     shape = RoundedCornerShape(13.dp),
                     textStyle = androidx.compose.ui.text.TextStyle(
                         fontFamily = FontFamily.Monospace,
@@ -341,6 +343,169 @@ fun SettingsScreen(vm: PocketViewModel) {
                     Text("Отмена", color = Muted)
                 }
             }
+        )
+    }
+}
+
+@Composable
+private fun McpPanel(vm: PocketViewModel) {
+    var showAdd by rememberSaveable { mutableStateOf(false) }
+    var name by rememberSaveable { mutableStateOf("") }
+    var url by rememberSaveable { mutableStateOf("") }
+
+    LaunchedEffect(Unit) {
+        if (vm.status == ConnState.CONNECTED) vm.loadMcp()
+    }
+
+    Panel {
+        SectionTitle("MCP-серверы") {
+            TextButton(
+                onClick = { vm.loadMcp() },
+                contentPadding = androidx.compose.foundation.layout.PaddingValues(
+                    horizontal = 8.dp,
+                    vertical = 0.dp
+                )
+            ) {
+                Text(if (vm.mcpBusy) "…" else "Обновить", color = Accent, fontSize = 11.sp)
+            }
+        }
+        Spacer(Modifier.height(6.dp))
+        if (vm.mcpServers.isEmpty()) {
+            Text(
+                "Ничего не подключено. Context7 и DeepWiki добавляются одной кнопкой.",
+                color = Muted,
+                fontSize = 11.sp,
+                lineHeight = 16.sp
+            )
+        }
+        vm.mcpServers.forEach { server ->
+            HorizontalDivider(color = Line.copy(alpha = 0.4f))
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(vertical = 6.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column(Modifier.weight(1f)) {
+                    Text(
+                        server.title.ifBlank { server.name },
+                        color = TextMain,
+                        fontSize = 12.5.sp,
+                        fontWeight = FontWeight.Medium,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                    Text(
+                        server.status + server.error.takeIf { it.isNotBlank() }?.let { " · $it" }.orEmpty(),
+                        color = when (server.status) {
+                            "connected" -> Accent
+                            "failed", "needs_auth" -> Danger
+                            else -> Muted
+                        },
+                        fontSize = 10.sp,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
+                TextButton(
+                    onClick = { vm.toggleMcp(server) },
+                    contentPadding = androidx.compose.foundation.layout.PaddingValues(
+                        horizontal = 8.dp,
+                        vertical = 0.dp
+                    )
+                ) {
+                    Text(
+                        if (server.connected) "Отключить" else "Подключить",
+                        color = Accent,
+                        fontSize = 10.5.sp
+                    )
+                }
+                TextButton(
+                    onClick = { vm.removeMcp(server.name) },
+                    contentPadding = androidx.compose.foundation.layout.PaddingValues(
+                        horizontal = 8.dp,
+                        vertical = 0.dp
+                    )
+                ) {
+                    Text("Удалить", color = Danger, fontSize = 10.5.sp)
+                }
+            }
+        }
+        Spacer(Modifier.height(8.dp))
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            OutlinedButton(
+                onClick = { vm.addMcpPreset("context7") },
+                shape = RoundedCornerShape(13.dp),
+                enabled = !vm.mcpBusy,
+                modifier = Modifier.weight(1f)
+            ) {
+                Text("Context7", fontSize = 11.5.sp)
+            }
+            OutlinedButton(
+                onClick = { vm.addMcpPreset("deepwiki") },
+                shape = RoundedCornerShape(13.dp),
+                enabled = !vm.mcpBusy,
+                modifier = Modifier.weight(1f)
+            ) {
+                Text("DeepWiki", fontSize = 11.5.sp)
+            }
+        }
+        TextButton(
+            onClick = { showAdd = !showAdd },
+            contentPadding = androidx.compose.foundation.layout.PaddingValues(
+                horizontal = 4.dp,
+                vertical = 0.dp
+            )
+        ) {
+            Text(if (showAdd) "Скрыть" else "Свой сервер", color = Muted, fontSize = 11.sp)
+        }
+        if (showAdd) {
+            OutlinedTextField(
+                value = name,
+                onValueChange = { name = it },
+                modifier = Modifier.fillMaxWidth(),
+                label = { Text("Имя", color = Muted, fontSize = 11.sp) },
+                placeholder = { Text("my-mcp", color = Dim, fontSize = 13.sp) },
+                singleLine = true,
+                shape = RoundedCornerShape(13.dp),
+                colors = fieldColors()
+            )
+            Spacer(Modifier.height(8.dp))
+            OutlinedTextField(
+                value = url,
+                onValueChange = { url = it },
+                modifier = Modifier.fillMaxWidth(),
+                label = { Text("URL", color = Muted, fontSize = 11.sp) },
+                placeholder = { Text("https://example.com/mcp", color = Dim, fontSize = 13.sp) },
+                singleLine = true,
+                shape = RoundedCornerShape(13.dp),
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri),
+                colors = fieldColors()
+            )
+            Spacer(Modifier.height(8.dp))
+            Button(
+                onClick = { vm.addRemoteMcp(name, url) },
+                shape = RoundedCornerShape(13.dp),
+                enabled = !vm.mcpBusy,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text("Добавить и подключить", fontSize = 11.5.sp)
+            }
+        }
+        if (vm.mcpStatus.isNotBlank()) {
+            Spacer(Modifier.height(6.dp))
+            Text(vm.mcpStatus, color = Accent, fontSize = 10.5.sp)
+        }
+        if (vm.mcpError.isNotBlank()) {
+            Spacer(Modifier.height(6.dp))
+            Text(vm.mcpError, color = Danger, fontSize = 10.5.sp, lineHeight = 15.sp)
+        }
+        Spacer(Modifier.height(4.dp))
+        Text(
+            "Локальные MCP (stdio) требуют node/python внутри сервера — доступны только remote.",
+            color = Dim,
+            fontSize = 9.5.sp,
+            lineHeight = 13.sp
         )
     }
 }

@@ -123,9 +123,14 @@ object MigrationManager {
                     return@forEach
                 }
                 destination.parentFile?.mkdirs()
-                if (destination.name == "config.json" && destination.isFile) {
+                if (destination.name in setOf(ConfigStore.FILE_NAME, ConfigStore.LEGACY_FILE_NAME) &&
+                    destination.isFile
+                ) {
                     runCatching {
-                        destination.copyTo(File(destination.parentFile, "config.json.bak"), overwrite = true)
+                        destination.copyTo(
+                            File(destination.parentFile, destination.name + ".bak"),
+                            overwrite = true
+                        )
                     }
                 }
                 runCatching { file.copyTo(destination, overwrite = true) }

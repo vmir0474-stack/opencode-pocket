@@ -26,7 +26,7 @@ object DebugBridge {
     private const val LAST_PORT = 4100
 
     private val actions = setOf(
-        "restart", "start", "stop", "reload", "skills", "config", "prompt", "api"
+        "restart", "start", "stop", "reload", "skills", "mcp", "config", "prompt", "api"
     )
     private val pool = Executors.newCachedThreadPool { runnable ->
         Thread(runnable, "debug-bridge-client").apply { isDaemon = true }
