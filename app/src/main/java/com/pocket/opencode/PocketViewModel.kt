@@ -63,6 +63,7 @@ class PocketViewModel(application: Application) : AndroidViewModel(application) 
     var sessionId by mutableStateOf(settings.sessionId)
     var sessionTitle by mutableStateOf(settings.sessionTitle)
     var sessionDirectory by mutableStateOf("")
+    var movingSession by mutableStateOf(false)
     var sessionCost by mutableStateOf(0.0)
     var tokensIn by mutableStateOf(0L)
     var tokensOut by mutableStateOf(0L)
@@ -388,6 +389,34 @@ class PocketViewModel(application: Application) : AndroidViewModel(application) 
     fun onWorkspacePathChange(value: String) {
         workspacePath = value
         settings.workspacePath = value
+    }
+
+    /**
+     * Старые сессии хранят каталог, в котором были созданы. Если доступ к
+     * /sdcard выдали позже, сессия остаётся во внутренней папке, и файлы
+     * агента не видны в проводнике. API умеет переносить сессию в актуальный
+     * workspace без потери истории.
+     */
+    fun moveSessionToWorkspace() {
+        val id = sessionId?.takeIf { it.isNotBlank() } ?: return
+        val target: String = serverStatus.workspace.ifBlank {
+            workspacePath.ifBlank { Workspace.defaultPath() }
+        }
+        if (movingSession || running || busy) return
+        movingSession = true
+        viewModelScope.launch {
+            runCatching { api.moveSession(baseUrl, password, id, target) }
+                .onSuccess {
+                    sessionDirectory = target
+                    statusDetail = "Сессия перемещена в $target"
+                    refreshSessionSuspend(id)
+                    loadProjectSuspend()
+                }
+                .onFailure {
+                    statusDetail = "Не удалось переместить сессию: ${it.message}"
+                }
+            movingSession = false
+        }
     }
 
     fun onAppResume() {

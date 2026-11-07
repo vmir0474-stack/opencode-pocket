@@ -224,6 +224,16 @@ class OpenCodeApi {
         )
     }
 
+    suspend fun moveSession(base: String, password: String, sessionID: String, directory: String) {
+        call(
+            post(
+                "${root(base)}/api/session/$sessionID/move",
+                password,
+                JSONObject().put("directory", directory)
+            )
+        )
+    }
+
     suspend fun activeSessions(base: String, password: String): Set<String> {
         val raw = call(request("${root(base)}/api/session/active", password).get().build())
         val data = JSONObject(raw).optJSONObject("data") ?: return emptySet()

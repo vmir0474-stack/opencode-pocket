@@ -131,8 +131,9 @@ object Environment {
         appendLine()
         appendLine("## Устройство")
         appendLine("- Android ${report.release.ifBlank { "?" }} (API ${report.sdk}), ${report.abi.ifBlank { "ABI ?" }}.")
-        appendLine("- Рабочий каталог: `${report.workspace}`.")
+        appendLine("- Рабочий каталог сервера (по умолчанию для новых сессий): `${report.workspace}`.")
         appendLine("- PATH сервера: `${report.serverPath}`.")
+        appendLine("- Текущая сессия могла быть создана раньше в другом каталоге. Всегда проверяй `pwd`; путь выше — не гарантия cwd этой сессии.")
         appendLine(
             when (report.storageMode) {
                 STORAGE_ALL_FILES -> "- Общее хранилище: доступ ко всем файлам выдан."
@@ -172,6 +173,11 @@ object Environment {
                 "- Встроенные инструменты: ${builtins.joinToString(" и ") { "`$it`" }} уже в PATH."
             }
         )
+        appendLine()
+        appendLine("## Поиск в интернете")
+        appendLine("- Встроенный `websearch` может вернуть HTTP 403 без VPN: поисковые провайдеры (Tavily, Exa, Parallel) блокируют часть регионов и IP. Это не поломка сети приложения: `webfetch` и `curl` при этом работают.")
+        appendLine("- Если `websearch` недоступен, не сдавайся: открой `webfetch` на `https://html.duckduckgo.com/html/?q=ЗАПРОС` (пробелы замени на `+`). DuckDuckGo отдаёт обычный HTML, ссылки находятся в блоках `result__a`, описания — в `result__snippet`.")
+        appendLine("- Ключ Tavily можно добавить в разделе «Модели» (поиск: tavily). Он может обойти лимит keyless-режима, но при блокировке по IP всё равно нужен VPN. Без ключа и без VPN используй резервный способ выше.")
         appendLine()
         appendLine("## Как работать")
         appendLine("- В списке «Доступно» — всё, что реально нашлось в PATH. Shell-встроенные команды (`cd`, `export`, `if`, `for`, `echo`, `printf`, `test`) доступны всегда.")

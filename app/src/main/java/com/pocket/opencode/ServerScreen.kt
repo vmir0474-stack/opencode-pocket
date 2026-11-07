@@ -281,6 +281,35 @@ fun WorkspacePanel(vm: PocketViewModel) {
                 lineHeight = 15.sp
             )
         }
+        val activeWorkspace = vm.serverStatus.workspace.ifBlank {
+            vm.workspacePath.ifBlank { Workspace.defaultPath() }
+        }
+        if (vm.sessionDirectory.isNotBlank() &&
+            File(vm.sessionDirectory).absolutePath != File(activeWorkspace).absolutePath
+        ) {
+            Spacer(Modifier.height(10.dp))
+            Text(
+                "Текущая сессия создана в старом каталоге: ${vm.sessionDirectory}. " +
+                    "Новые сессии уже используют $activeWorkspace, но эта останется " +
+                    "внутри приложения, пока её не переместить.",
+                color = Warn,
+                fontSize = 10.5.sp,
+                lineHeight = 15.sp
+            )
+            Spacer(Modifier.height(8.dp))
+            OutlinedButton(
+                onClick = { vm.moveSessionToWorkspace() },
+                shape = RoundedCornerShape(13.dp),
+                modifier = Modifier.fillMaxWidth(),
+                enabled = !vm.movingSession && !vm.running && !vm.busy &&
+                    vm.sessionId?.isNotBlank() == true
+            ) {
+                Text(
+                    if (vm.movingSession) "Перемещаю…" else "Переместить сессию в рабочий каталог",
+                    fontSize = 11.5.sp
+                )
+            }
+        }
     }
 }
 
