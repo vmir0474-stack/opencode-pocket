@@ -71,8 +71,8 @@ internal fun proseAnnotated(source: String): AnnotatedString = buildAnnotatedStr
             withStyle(
                 SpanStyle(
                     fontFamily = FontFamily.Monospace,
-                    background = Color(0xFF23253C),
-                    color = Color(0xFFD9CFFF)
+                    background = Color(0xFF23201A),
+                    color = Color(0xFFF0D9B0)
                 )
             ) { append(token.removePrefix("`").removeSuffix("`")) }
         }

@@ -52,13 +52,19 @@ import java.util.Locale
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SessionsSheet(vm: PocketViewModel, onDismiss: () -> Unit) {
+    var query by rememberSaveable { mutableStateOf("") }
+    val sessions = vm.sessions.filter { session ->
+        query.isBlank() ||
+            session.title.contains(query, ignoreCase = true) ||
+            session.directory.contains(query, ignoreCase = true)
+    }
     ModalBottomSheet(
         onDismissRequest = onDismiss,
         containerColor = Card,
         contentColor = TextMain,
         dragHandle = { BottomSheetDefaults.DragHandle(color = Line) }
     ) {
-        Column(Modifier.fillMaxHeight(0.78f)) {
+        Column(Modifier.fillMaxHeight(0.82f)) {
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -87,14 +93,23 @@ fun SessionsSheet(vm: PocketViewModel, onDismiss: () -> Unit) {
                     Text("Новая", fontSize = 12.sp)
                 }
             }
+            PocketSearchField(
+                value = query,
+                onValueChange = { query = it },
+                placeholder = "Поиск по названию или каталогу",
+                modifier = Modifier.padding(horizontal = 20.dp, vertical = 4.dp)
+            )
+            Spacer(Modifier.height(8.dp))
             HorizontalDivider(color = Line)
 
             if (vm.sessions.isEmpty()) {
                 EmptyHint("Сессий пока нет", "Создай новую сессию или отправь первое сообщение в чат.")
+            } else if (sessions.isEmpty()) {
+                EmptyHint("Ничего не найдено", "Попробуй другой запрос или очисти поиск.")
             }
 
             LazyColumn(Modifier.weight(1f), contentPadding = PaddingValues(bottom = 24.dp)) {
-                items(vm.sessions, key = { it.id }) { session ->
+                items(sessions, key = { it.id }) { session ->
                     val current = session.id == vm.sessionId
                     val active = vm.activeSessions.contains(session.id)
                     Row(
@@ -201,23 +216,10 @@ fun ModelsSheet(vm: PocketViewModel, onDismiss: () -> Unit) {
                     overflow = TextOverflow.Ellipsis
                 )
                 Spacer(Modifier.height(10.dp))
-                OutlinedTextField(
+                PocketSearchField(
                     value = query,
                     onValueChange = { query = it },
-                    modifier = Modifier.fillMaxWidth(),
-                    placeholder = { Text("Поиск модели", color = Dim, fontSize = 13.sp) },
-                    leadingIcon = {
-                        Icon(Icons.Default.Search, null, tint = Dim, modifier = Modifier.size(18.dp))
-                    },
-                    singleLine = true,
-                    shape = RoundedCornerShape(14.dp),
-                    colors = OutlinedTextFieldDefaults.colors(
-                        focusedBorderColor = Accent.copy(alpha = 0.5f),
-                        unfocusedBorderColor = Line,
-                        focusedContainerColor = Card2,
-                        unfocusedContainerColor = Card2,
-                        cursorColor = Accent
-                    )
+                    placeholder = "Поиск модели или провайдера"
                 )
                 Spacer(Modifier.height(10.dp))
             }
@@ -231,11 +233,10 @@ fun ModelsSheet(vm: PocketViewModel, onDismiss: () -> Unit) {
                 groups.forEach { (provider, list) ->
                     item(key = "provider_$provider") {
                         Text(
-                            provider.uppercase(Locale.getDefault()),
-                            color = Accent,
-                            fontSize = 9.5.sp,
-                            fontWeight = FontWeight.Bold,
-                            letterSpacing = 1.6.sp,
+                            provider,
+                            color = Muted,
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.SemiBold,
                             modifier = Modifier.padding(start = 20.dp, top = 14.dp, bottom = 6.dp)
                         )
                     }

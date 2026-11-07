@@ -1,5 +1,6 @@
 package com.pocket.opencode
 
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -7,6 +8,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
 import androidx.compose.material3.HorizontalDivider
@@ -17,6 +19,8 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -29,18 +33,33 @@ import androidx.compose.ui.unit.sp
 @Composable
 fun EnvironmentPanel(vm: PocketViewModel) {
     LaunchedEffect(Unit) { vm.refreshEnvironment() }
+    val clipboard = LocalClipboardManager.current
 
     Panel {
         SectionTitle("Окружение") {
-            TextButton(
-                onClick = { vm.refreshEnvironment() },
-                enabled = !vm.environmentBusy,
-                contentPadding = androidx.compose.foundation.layout.PaddingValues(
-                    horizontal = 8.dp,
-                    vertical = 0.dp
-                )
-            ) {
-                Text(if (vm.environmentBusy) "…" else "Обновить", color = Accent, fontSize = 11.sp)
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                val report = vm.environment
+                if (report != null) {
+                    TextButton(
+                        onClick = { clipboard.setText(AnnotatedString(environmentSummary(report))) },
+                        contentPadding = androidx.compose.foundation.layout.PaddingValues(
+                            horizontal = 8.dp,
+                            vertical = 0.dp
+                        )
+                    ) {
+                        Text("Копировать", color = Muted, fontSize = 11.sp)
+                    }
+                }
+                TextButton(
+                    onClick = { vm.refreshEnvironment() },
+                    enabled = !vm.environmentBusy,
+                    contentPadding = androidx.compose.foundation.layout.PaddingValues(
+                        horizontal = 8.dp,
+                        vertical = 0.dp
+                    )
+                ) {
+                    Text(if (vm.environmentBusy) "…" else "Обновить", color = Accent, fontSize = 11.sp)
+                }
             }
         }
         Spacer(Modifier.height(8.dp))
@@ -91,35 +110,42 @@ fun EnvironmentPanel(vm: PocketViewModel) {
 
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(
-                    "ДОСТУПНЫЕ КОМАНДЫ",
-                    color = Dim,
-                    fontSize = 9.5.sp,
-                    letterSpacing = 1.2.sp,
+                    "Доступные команды",
+                    color = Muted,
+                    fontSize = 11.5.sp,
+                    fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold,
                     modifier = Modifier.weight(1f)
                 )
                 StatusPill("${report.available.size}", Mint)
             }
-            Spacer(Modifier.height(5.dp))
-            Text(
-                report.availableNames.joinToString(", ").ifBlank { "нет" },
-                color = TextMain,
-                fontSize = 11.sp,
-                lineHeight = 16.sp,
-                fontFamily = FontFamily.Monospace
-            )
+            Spacer(Modifier.height(7.dp))
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .horizontalScroll(rememberScrollState()),
+                horizontalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
+                if (report.availableNames.isEmpty()) {
+                    Text("нет", color = Dim, fontSize = 11.sp)
+                } else {
+                    report.availableNames.forEach { name ->
+                        MetricPill(name, Mint)
+                    }
+                }
+            }
 
             if (report.missing.isNotEmpty()) {
-                Spacer(Modifier.height(10.dp))
+                Spacer(Modifier.height(12.dp))
                 Text(
-                    "НЕДОСТУПНЫ",
-                    color = Dim,
-                    fontSize = 9.5.sp,
-                    letterSpacing = 1.2.sp
+                    "Недоступны",
+                    color = Muted,
+                    fontSize = 11.5.sp,
+                    fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold
                 )
                 Spacer(Modifier.height(5.dp))
                 Text(
                     report.missing.joinToString(", "),
-                    color = Muted,
+                    color = Dim,
                     fontSize = 11.sp,
                     lineHeight = 16.sp,
                     fontFamily = FontFamily.Monospace
@@ -180,5 +206,26 @@ fun EnvironmentPanel(vm: PocketViewModel) {
                 modifier = Modifier.padding(bottom = 2.dp)
             )
         }
+    }
+}
+
+private fun environmentSummary(report: EnvReport): String = buildString {
+    appendLine("OpenCode Pocket · окружение")
+    appendLine("Android ${report.release.ifBlank { "?" }} · API ${report.sdk} · ${report.abi}")
+    appendLine(
+        "Хранилище: " + when (report.storageMode) {
+            "all_files" -> "доступ ко всем файлам"
+            "legacy" -> "разрешение Android (до 11)"
+            else -> "только внутренняя папка"
+        }
+    )
+    appendLine("Батарея: " + if (report.batteryExempt) "ограничения сняты" else "оптимизируется системой")
+    appendLine("Root: " + if (report.rootBinary) "su найден, приложению не нужен" else "не требуется")
+    appendLine("Каталог: ${report.workspace}")
+    appendLine("PATH сервера: ${report.serverPath}")
+    appendLine()
+    appendLine("Доступно (${report.available.size}): ${report.availableNames.joinToString(", ").ifBlank { "нет" }}")
+    if (report.missing.isNotEmpty()) {
+        appendLine("Недоступно: ${report.missing.joinToString(", ")}")
     }
 }

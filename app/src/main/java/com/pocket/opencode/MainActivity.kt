@@ -10,20 +10,26 @@ import androidx.activity.SystemBarStyle
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.viewModels
+import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.slideOutVertically
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.ime
@@ -34,6 +40,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
@@ -100,62 +107,94 @@ class MainActivity : ComponentActivity() {
     }
 }
 
+private val tabTitles = listOf("Чат", "Проект", "Модели", "Скилы", "Связь")
+private val tabSubtitles = listOf(
+    "OpenCode Server API v2",
+    "Файлы, git и просмотр diff",
+    "Провайдеры, ключи и модели",
+    "Локальная библиотека навыков",
+    "Подключение и встроенный сервер"
+)
+
 @Composable
 fun PocketApp(vm: PocketViewModel) {
     var debugOpen by rememberSaveable { mutableStateOf(false) }
     val density = LocalDensity.current
     val imeVisible = WindowInsets.ime.getBottom(density) > 0
     val navBottom = with(density) { WindowInsets.navigationBars.getBottom(this).toDp() }
-    val dockSpace by animateDpAsState(
-        targetValue = if (imeVisible) 0.dp else navBottom + 82.dp,
-        label = "dockSpace"
-    )
 
-    Box(
+    BoxWithConstraints(
         Modifier
             .fillMaxSize()
             .background(
                 Brush.verticalGradient(
-                    listOf(Color(0xFF0C0918), Bg, Color(0xFF050409))
+                    listOf(Color(0xFF0E1116), Bg, Color(0xFF07080B))
                 )
             )
     ) {
-        Column(Modifier.fillMaxSize().statusBarsPadding()) {
-            PocketHeader(vm, onDebug = { debugOpen = true })
-            Box(
-                Modifier
-                    .weight(1f)
-                    .fillMaxWidth()
-                    .padding(bottom = dockSpace)
-                    .then(if (vm.tab == 0) Modifier else Modifier.imePadding())
-            ) {
-                when (vm.tab) {
-                    0 -> ChatScreen(vm)
-                    1 -> ProjectScreen(vm)
-                    2 -> ProvidersScreen(vm)
-                    3 -> SkillsScreen(vm)
-                    else -> SettingsScreen(vm)
+        val expanded = maxWidth >= 600.dp
+        val pending = vm.permissions.size + vm.forms.size
+        val dockSpace by animateDpAsState(
+            targetValue = if (expanded || imeVisible) 0.dp else navBottom + 84.dp,
+            label = "dockSpace"
+        )
+        val maxContent = if (vm.tab == 0) 860.dp else 980.dp
+
+        if (expanded) {
+            Row(Modifier.fillMaxSize()) {
+                PocketRail(
+                    selected = vm.tab,
+                    pending = pending,
+                    status = vm.status,
+                    onSelect = { vm.selectTab(it) },
+                    modifier = Modifier
+                        .fillMaxHeight()
+                        .statusBarsPadding()
+                        .navigationBarsPadding()
+                )
+                Column(
+                    Modifier
+                        .weight(1f)
+                        .fillMaxHeight()
+                        .statusBarsPadding()
+                        .navigationBarsPadding()
+                ) {
+                    PocketHeader(vm, expanded = true, onDebug = { debugOpen = true })
+                    TabContent(vm, maxContent)
                 }
             }
-        }
+        } else {
+            Column(Modifier.fillMaxSize().statusBarsPadding()) {
+                PocketHeader(vm, expanded = false, onDebug = { debugOpen = true })
+                Box(
+                    Modifier
+                        .weight(1f)
+                        .fillMaxWidth()
+                        .padding(bottom = dockSpace)
+                        .then(if (vm.tab == 0) Modifier else Modifier.imePadding())
+                ) {
+                    TabContent(vm, maxContent)
+                }
+            }
 
-        Box(
-            Modifier
-                .align(Alignment.BottomCenter)
-                .fillMaxWidth()
-                .navigationBarsPadding()
-                .padding(horizontal = 14.dp, vertical = 8.dp)
-        ) {
-            AnimatedVisibility(
-                visible = !imeVisible,
-                enter = fadeIn() + slideInVertically { it / 2 },
-                exit = fadeOut() + slideOutVertically { it / 2 }
+            Box(
+                Modifier
+                    .align(Alignment.BottomCenter)
+                    .fillMaxWidth()
+                    .navigationBarsPadding()
+                    .padding(horizontal = 14.dp, vertical = 8.dp)
             ) {
-                PocketDock(
-                    selected = vm.tab,
-                    pending = vm.permissions.size + vm.forms.size,
-                    onSelect = { vm.selectTab(it) }
-                )
+                AnimatedVisibility(
+                    visible = !imeVisible,
+                    enter = fadeIn() + slideInVertically { it / 2 },
+                    exit = fadeOut() + slideOutVertically { it / 2 }
+                ) {
+                    PocketDock(
+                        selected = vm.tab,
+                        pending = pending,
+                        onSelect = { vm.selectTab(it) }
+                    )
+                }
             }
         }
     }
@@ -167,45 +206,79 @@ fun PocketApp(vm: PocketViewModel) {
 }
 
 @Composable
-private fun PocketHeader(vm: PocketViewModel, onDebug: () -> Unit) {
+private fun TabContent(vm: PocketViewModel, maxContent: androidx.compose.ui.unit.Dp) {
+    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.TopCenter) {
+        Box(Modifier.widthIn(max = maxContent).fillMaxHeight()) {
+            AnimatedContent(
+                targetState = vm.tab,
+                transitionSpec = {
+                    (fadeIn() + slideInHorizontally { it / 14 }) togetherWith
+                        (fadeOut() + slideOutHorizontally { -it / 14 })
+                },
+                label = "tabContent"
+            ) { tab ->
+                when (tab) {
+                    0 -> ChatScreen(vm)
+                    1 -> ProjectScreen(vm)
+                    2 -> ProvidersScreen(vm)
+                    3 -> SkillsScreen(vm)
+                    else -> SettingsScreen(vm)
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun PocketHeader(vm: PocketViewModel, expanded: Boolean, onDebug: () -> Unit) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 6.dp),
+            .padding(horizontal = 16.dp, vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Box(
-            modifier = Modifier
-                .size(32.dp)
-                .clip(RoundedCornerShape(10.dp))
-                .background(Brush.linearGradient(listOf(Accent, Accent2)))
-                .pointerInput(Unit) {
-                    detectTapGestures(onLongPress = { onDebug() })
-                },
-            contentAlignment = Alignment.Center
-        ) {
-            Text(
-                ">_",
-                color = Color.White,
-                fontFamily = FontFamily.Monospace,
-                fontSize = 12.sp,
-                fontWeight = FontWeight.Bold
-            )
+        if (!expanded) {
+            Box(
+                modifier = Modifier
+                    .size(34.dp)
+                    .clip(RoundedCornerShape(11.dp))
+                    .background(Brush.linearGradient(listOf(Accent, Accent2)))
+                    .pointerInput(Unit) {
+                        detectTapGestures(onLongPress = { onDebug() })
+                    },
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    ">_",
+                    color = Color(0xFF241505),
+                    fontFamily = FontFamily.Monospace,
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Bold
+                )
+            }
+            Spacer(Modifier.width(10.dp))
         }
-        Spacer(Modifier.width(10.dp))
         Column(Modifier.weight(1f)) {
             Text(
-                "OpenCode",
+                if (expanded) tabTitles.getOrElse(vm.tab) { "OpenCode" } else "OpenCode",
                 color = TextMain,
-                fontSize = 15.sp,
+                fontSize = 16.sp,
+                lineHeight = 20.sp,
                 fontWeight = FontWeight.SemiBold,
-                letterSpacing = 0.2.sp
+                letterSpacing = 0.1.sp,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
             )
             Text(
-                "Pocket · ${vm.serverInfo?.version ?: "Android"}",
+                if (expanded) {
+                    tabSubtitles.getOrElse(vm.tab) { "" }
+                } else {
+                    "Pocket · ${vm.serverInfo?.version ?: "Android"}"
+                },
                 color = Dim,
-                fontSize = 9.sp,
-                letterSpacing = 0.4.sp,
+                fontSize = 10.sp,
+                lineHeight = 13.sp,
+                letterSpacing = 0.3.sp,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
             )
@@ -225,7 +298,8 @@ private fun PocketHeader(vm: PocketViewModel, onDebug: () -> Unit) {
                 vm.statusLabel,
                 color = tone,
                 fontSize = 11.sp,
-                fontWeight = FontWeight.Medium
+                fontWeight = FontWeight.Medium,
+                maxLines = 1
             )
         }
     }

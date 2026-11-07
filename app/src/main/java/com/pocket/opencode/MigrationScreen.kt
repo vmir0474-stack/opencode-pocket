@@ -26,6 +26,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontFamily
@@ -60,6 +61,7 @@ fun MigrationPanel(vm: PocketViewModel) {
                 fontFamily = FontFamily.Monospace,
                 modifier = Modifier
                     .fillMaxWidth()
+                    .clip(RoundedCornerShape(10.dp))
                     .background(CodeBg)
                     .padding(10.dp)
             )
@@ -82,21 +84,14 @@ fun MigrationPanel(vm: PocketViewModel) {
             label = { Text("Путь к архиву", color = Muted, fontSize = 11.sp) },
             singleLine = true,
             shape = RoundedCornerShape(13.dp),
-            colors = OutlinedTextFieldDefaults.colors(
-                focusedBorderColor = Accent.copy(alpha = 0.5f),
-                unfocusedBorderColor = Line,
-                focusedContainerColor = Card2,
-                unfocusedContainerColor = Card2,
-                cursorColor = Accent,
-                focusedTextColor = TextMain,
-                unfocusedTextColor = TextMain
-            )
+            colors = pocketFieldColors()
         )
         Spacer(Modifier.height(10.dp))
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             OutlinedButton(
                 onClick = { vm.previewMigration() },
                 shape = RoundedCornerShape(13.dp),
+                modifier = Modifier.weight(1f),
                 enabled = !vm.migrationBusy
             ) {
                 Text("Проверить архив", fontSize = 11.5.sp)
@@ -104,6 +99,7 @@ fun MigrationPanel(vm: PocketViewModel) {
             Button(
                 onClick = { confirmImport = true },
                 shape = RoundedCornerShape(13.dp),
+                modifier = Modifier.weight(1f),
                 enabled = !vm.migrationBusy
             ) {
                 Text("Импортировать", fontSize = 11.5.sp)

@@ -78,6 +78,7 @@ fun ServerPanel(vm: PocketViewModel) {
                 Button(
                     onClick = { vm.startEmbedded() },
                     shape = RoundedCornerShape(13.dp),
+                    modifier = Modifier.weight(1f),
                     enabled = state == EmbeddedState.STOPPED || state == EmbeddedState.ERROR
                 ) {
                     Text("Запустить", fontSize = 12.sp)
@@ -85,16 +86,19 @@ fun ServerPanel(vm: PocketViewModel) {
                 OutlinedButton(
                     onClick = { vm.stopEmbedded() },
                     shape = RoundedCornerShape(13.dp),
+                    modifier = Modifier.weight(1f),
                     enabled = state != EmbeddedState.STOPPED
                 ) {
                     Text("Остановить", fontSize = 12.sp)
                 }
-                OutlinedButton(
-                    onClick = { vm.restartEmbedded() },
-                    shape = RoundedCornerShape(13.dp)
-                ) {
-                    Text("Перезапустить", fontSize = 12.sp)
-                }
+            }
+            Spacer(Modifier.height(8.dp))
+            OutlinedButton(
+                onClick = { vm.restartEmbedded() },
+                shape = RoundedCornerShape(13.dp),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text("Перезапустить сервер", fontSize = 12.sp)
             }
             Spacer(Modifier.height(12.dp))
             HorizontalDivider(color = Line)
@@ -122,11 +126,10 @@ private fun LogBlock(vm: PocketViewModel) {
     val lines = vm.serverLog.takeLast(100)
     Row(verticalAlignment = Alignment.CenterVertically) {
         Text(
-            "ЖУРНАЛ СЕРВЕРА",
+            "Журнал сервера",
             color = Muted,
-            fontSize = 10.sp,
-            fontWeight = FontWeight.Bold,
-            letterSpacing = 1.8.sp,
+            fontSize = 12.sp,
+            fontWeight = FontWeight.SemiBold,
             modifier = Modifier.weight(1f)
         )
         TextButton(
@@ -219,30 +222,24 @@ fun WorkspacePanel(vm: PocketViewModel) {
             placeholder = { Text(Workspace.defaultPath(), color = Dim, fontSize = 13.sp) },
             singleLine = true,
             shape = RoundedCornerShape(13.dp),
-            colors = OutlinedTextFieldDefaults.colors(
-                focusedBorderColor = Accent.copy(alpha = 0.5f),
-                unfocusedBorderColor = Line,
-                focusedContainerColor = Card2,
-                unfocusedContainerColor = Card2,
-                cursorColor = Accent,
-                focusedTextColor = TextMain,
-                unfocusedTextColor = TextMain
-            )
+            colors = pocketFieldColors()
         )
         Spacer(Modifier.height(10.dp))
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             OutlinedButton(
                 onClick = { vm.checkWorkspace() },
-                shape = RoundedCornerShape(13.dp)
+                shape = RoundedCornerShape(13.dp),
+                modifier = Modifier.weight(1f)
             ) {
                 Text("Проверить доступ", fontSize = 11.5.sp)
             }
             OutlinedButton(
                 onClick = { vm.restartEmbedded() },
                 shape = RoundedCornerShape(13.dp),
+                modifier = Modifier.weight(1f),
                 enabled = vm.isEmbedded
             ) {
-                Text("Перезапустить сервер", fontSize = 11.5.sp)
+                Text("Перезапуск", fontSize = 11.5.sp)
             }
         }
         Spacer(Modifier.height(10.dp))

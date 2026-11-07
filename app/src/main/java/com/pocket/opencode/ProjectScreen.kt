@@ -36,6 +36,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -59,6 +60,7 @@ private sealed interface ViewerRequest {
 @Composable
 fun ProjectScreen(vm: PocketViewModel) {
     var viewer by remember { mutableStateOf<ViewerRequest?>(null) }
+    var fileFilter by rememberSaveable { mutableStateOf("") }
 
     Column(
         modifier = Modifier
@@ -67,18 +69,10 @@ fun ProjectScreen(vm: PocketViewModel) {
             .padding(horizontal = 16.dp, vertical = 10.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Column(Modifier.weight(1f)) {
-                Text("Проект", color = TextMain, fontSize = 22.sp, fontWeight = FontWeight.Bold)
-                Text(
-                    vm.directoryLabel.ifBlank { "каталог не определён" },
-                    color = Dim,
-                    fontSize = 10.sp,
-                    fontFamily = FontFamily.Monospace,
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis
-                )
-            }
+        ScreenHeader(
+            title = "Проект",
+            subtitle = vm.directoryLabel.ifBlank { "каталог не определён" }
+        ) {
             IconButton(onClick = { vm.refreshProject() }, enabled = !vm.projectBusy) {
                 if (vm.projectBusy) {
                     CircularProgressIndicator(
@@ -94,20 +88,22 @@ fun ProjectScreen(vm: PocketViewModel) {
 
         Panel {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Text("ВЕТКА", color = Dim, fontSize = 9.5.sp, letterSpacing = 1.4.sp)
+                Text("Ветка", color = Muted, fontSize = 11.5.sp)
                 Spacer(Modifier.width(10.dp))
                 Text(
                     vm.vcsSummary?.current?.ifBlank { "—" } ?: "—",
                     color = TextMain,
                     fontFamily = FontFamily.Monospace,
                     fontSize = 12.5.sp,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
                     modifier = Modifier.weight(1f)
                 )
                 vm.vcsSummary?.provider?.takeIf { it.isNotBlank() }?.let {
                     Text(
                         it,
                         color = Accent,
-                        fontSize = 9.5.sp,
+                        fontSize = 10.sp,
                         modifier = Modifier
                             .clip(RoundedCornerShape(7.dp))
                             .background(AccentDim)
@@ -120,35 +116,9 @@ fun ProjectScreen(vm: PocketViewModel) {
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     val additions = vm.vcsFiles.sumOf { it.additions }
                     val deletions = vm.vcsFiles.sumOf { it.deletions }
-                    Text(
-                        "${vm.vcsFiles.size} изм.",
-                        color = TextMain,
-                        fontSize = 11.sp,
-                        modifier = Modifier
-                            .clip(RoundedCornerShape(8.dp))
-                            .background(Card2)
-                            .padding(horizontal = 8.dp, vertical = 4.dp)
-                    )
-                    Text(
-                        "+$additions",
-                        color = Mint,
-                        fontSize = 11.sp,
-                        fontFamily = FontFamily.Monospace,
-                        modifier = Modifier
-                            .clip(RoundedCornerShape(8.dp))
-                            .background(Mint.copy(alpha = 0.10f))
-                            .padding(horizontal = 8.dp, vertical = 4.dp)
-                    )
-                    Text(
-                        "-$deletions",
-                        color = Danger,
-                        fontSize = 11.sp,
-                        fontFamily = FontFamily.Monospace,
-                        modifier = Modifier
-                            .clip(RoundedCornerShape(8.dp))
-                            .background(Danger.copy(alpha = 0.10f))
-                            .padding(horizontal = 8.dp, vertical = 4.dp)
-                    )
+                    MetricPill("${vm.vcsFiles.size} изм.", Muted)
+                    MetricPill("+$additions", Mint)
+                    MetricPill("−$deletions", Danger)
                 }
             }
         }
@@ -162,9 +132,9 @@ fun ProjectScreen(vm: PocketViewModel) {
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .clip(RoundedCornerShape(8.dp))
+                            .clip(RoundedCornerShape(9.dp))
                             .clickable { viewer = ViewerRequest.Diff(file.path) }
-                            .padding(vertical = 7.dp),
+                            .padding(vertical = 8.dp, horizontal = 2.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Text(
@@ -181,7 +151,7 @@ fun ProjectScreen(vm: PocketViewModel) {
                             fontSize = 10.sp,
                             fontWeight = FontWeight.Bold,
                             fontFamily = FontFamily.Monospace,
-                            modifier = Modifier.width(18.dp)
+                            modifier = Modifier.width(20.dp)
                         )
                         Text(
                             file.path,
@@ -193,9 +163,9 @@ fun ProjectScreen(vm: PocketViewModel) {
                             modifier = Modifier.weight(1f)
                         )
                         Spacer(Modifier.width(8.dp))
-                        Text("+${file.additions}", color = Mint, fontSize = 9.5.sp)
+                        Text("+${file.additions}", color = Mint, fontSize = 10.sp)
                         Spacer(Modifier.width(5.dp))
-                        Text("-${file.deletions}", color = Danger, fontSize = 9.5.sp)
+                        Text("−${file.deletions}", color = Danger, fontSize = 10.sp)
                     }
                     if (index != vm.vcsFiles.take(40).lastIndex) {
                         HorizontalDivider(color = Line.copy(alpha = 0.4f))
@@ -207,20 +177,16 @@ fun ProjectScreen(vm: PocketViewModel) {
         Panel {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(
-                    "ФАЙЛЫ",
-                    color = Dim,
-                    fontSize = 9.5.sp,
-                    fontWeight = FontWeight.Bold,
-                    letterSpacing = 1.4.sp
+                    "Файлы",
+                    color = Muted,
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.SemiBold
                 )
                 Spacer(Modifier.width(10.dp))
                 Text(
-                    vm.projectPath,
-                    color = Accent,
-                    fontFamily = FontFamily.Monospace,
-                    fontSize = 10.5.sp,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
+                    "${vm.projectFiles.count { it.path != "." && it.path != ".." }}",
+                    color = Dim,
+                    fontSize = 10.sp,
                     modifier = Modifier.weight(1f)
                 )
                 if (vm.projectPath != ".") {
@@ -229,13 +195,21 @@ fun ProjectScreen(vm: PocketViewModel) {
                             val parent = vm.projectPath.substringBeforeLast('/', "")
                             vm.browseProject(parent.ifBlank { "." })
                         },
-                        modifier = Modifier.size(30.dp)
+                        modifier = Modifier.size(32.dp)
                     ) {
                         Icon(Icons.Default.KeyboardArrowUp, "Вверх", tint = Muted)
                     }
                 }
             }
-            Spacer(Modifier.height(8.dp))
+            Spacer(Modifier.height(6.dp))
+            Breadcrumbs(vm)
+            Spacer(Modifier.height(10.dp))
+            PocketSearchField(
+                value = fileFilter,
+                onValueChange = { fileFilter = it },
+                placeholder = "Фильтр по имени или пути"
+            )
+            Spacer(Modifier.height(10.dp))
 
             if (!vm.projectLoaded) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
@@ -247,25 +221,36 @@ fun ProjectScreen(vm: PocketViewModel) {
                     Spacer(Modifier.width(8.dp))
                     Text("Загрузка каталога…", color = Muted, fontSize = 12.sp)
                 }
-            } else if (vm.projectFiles.isEmpty()) {
-                EmptyHint("Каталог пуст", "Агент работает в директории, где запущен сервер.")
             } else {
-                vm.projectFiles
-                    .filter { it.path != "." && it.path != ".." }
-                    .forEachIndexed { index, entry ->
+                val entries = vm.projectFiles.filter { entry ->
+                    entry.path != "." && entry.path != ".." &&
+                        (fileFilter.isBlank() || entry.path.contains(fileFilter, ignoreCase = true))
+                }
+                if (entries.isEmpty()) {
+                    EmptyHint(
+                        if (fileFilter.isBlank()) "Каталог пуст" else "Ничего не найдено",
+                        if (fileFilter.isBlank()) {
+                            "Агент работает в директории, где запущен сервер."
+                        } else {
+                            "Попробуй другой запрос или очисти фильтр."
+                        }
+                    )
+                } else {
+                    entries.forEachIndexed { index, entry ->
                         val name = entry.path.substringAfterLast('/')
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .clip(RoundedCornerShape(8.dp))
+                                .clip(RoundedCornerShape(9.dp))
                                 .clickable {
                                     if (entry.type == "directory") {
                                         vm.browseProject(entry.path)
+                                        fileFilter = ""
                                     } else {
                                         viewer = ViewerRequest.File(entry.path)
                                     }
                                 }
-                                .padding(vertical = 7.dp),
+                                .padding(vertical = 8.dp, horizontal = 2.dp),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             Text(
@@ -273,7 +258,7 @@ fun ProjectScreen(vm: PocketViewModel) {
                                 color = if (entry.type == "directory") Accent else Dim,
                                 fontSize = 12.sp,
                                 fontFamily = FontFamily.Monospace,
-                                modifier = Modifier.width(18.dp)
+                                modifier = Modifier.width(20.dp)
                             )
                             Text(
                                 name,
@@ -285,13 +270,14 @@ fun ProjectScreen(vm: PocketViewModel) {
                                 modifier = Modifier.weight(1f)
                             )
                             if (entry.type == "directory") {
-                                Text("папка", color = Dim, fontSize = 9.sp)
+                                Text("→", color = Dim, fontSize = 11.sp)
                             }
                         }
-                        if (index != vm.projectFiles.size - 1) {
+                        if (index != entries.lastIndex) {
                             HorizontalDivider(color = Line.copy(alpha = 0.35f))
                         }
                     }
+                }
             }
         }
 
@@ -307,6 +293,43 @@ fun ProjectScreen(vm: PocketViewModel) {
     viewer?.let { request ->
         ViewerDialog(vm, request) { viewer = null }
     }
+}
+
+@Composable
+private fun Breadcrumbs(vm: PocketViewModel) {
+    val segments = if (vm.projectPath == "." || vm.projectPath.isBlank()) {
+        emptyList()
+    } else {
+        vm.projectPath.split('/').filter { it.isNotBlank() }
+    }
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .horizontalScroll(rememberScrollState()),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Crumb("workspace", active = segments.isEmpty()) { vm.browseProject(".") }
+        segments.forEachIndexed { index, segment ->
+            Text("/", color = Dim, fontSize = 10.5.sp, modifier = Modifier.padding(horizontal = 2.dp))
+            val target = segments.take(index + 1).joinToString("/")
+            Crumb(segment, active = index == segments.lastIndex) { vm.browseProject(target) }
+        }
+    }
+}
+
+@Composable
+private fun Crumb(label: String, active: Boolean, onClick: () -> Unit) {
+    Text(
+        label,
+        color = if (active) Accent else Muted,
+        fontFamily = FontFamily.Monospace,
+        fontSize = 10.5.sp,
+        maxLines = 1,
+        modifier = Modifier
+            .clip(RoundedCornerShape(6.dp))
+            .clickable(enabled = !active, onClick = onClick)
+            .padding(horizontal = 5.dp, vertical = 3.dp)
+    )
 }
 
 @Composable
@@ -385,9 +408,8 @@ private fun ViewerDialog(vm: PocketViewModel, request: ViewerRequest, onDismiss:
                         Text(
                             if (isDiff) "Diff" else "Файл",
                             color = Accent,
-                            fontSize = 9.5.sp,
-                            fontWeight = FontWeight.Bold,
-                            letterSpacing = 1.5.sp
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.SemiBold
                         )
                         Text(
                             path,
@@ -451,7 +473,7 @@ private fun ViewerDialog(vm: PocketViewModel, request: ViewerRequest, onDismiss:
                         SelectionContainer {
                             Text(
                                 if (isDiff) diffAnnotated(content) else AnnotatedString(content),
-                                color = Color(0xFFCFCBE0),
+                                color = Color(0xFFE2DDD2),
                                 fontFamily = FontFamily.Monospace,
                                 fontSize = 11.sp,
                                 lineHeight = 16.sp

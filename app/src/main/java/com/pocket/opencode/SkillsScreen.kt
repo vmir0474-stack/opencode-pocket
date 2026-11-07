@@ -32,6 +32,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontWeight
@@ -62,14 +63,13 @@ fun SkillsScreen(vm: PocketViewModel) {
             .padding(horizontal = 16.dp, vertical = 10.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Column(Modifier.weight(1f)) {
-                Text("Скилы", color = TextMain, fontSize = 22.sp, fontWeight = FontWeight.Bold)
-                Text("Библиотека OpenCode", color = Muted, fontSize = 11.5.sp)
-            }
+        ScreenHeader(
+            title = "Скилы",
+            subtitle = "Библиотека OpenCode · ${vm.skills.size} навыков"
+        ) {
             if (vm.skillBusy) {
                 CircularProgressIndicator(
-                    modifier = Modifier.size(16.dp),
+                    modifier = Modifier.size(18.dp),
                     color = Accent,
                     strokeWidth = 1.5.dp
                 )
@@ -85,14 +85,10 @@ fun SkillsScreen(vm: PocketViewModel) {
             Text(vm.skillError, color = Danger, fontSize = 11.5.sp, lineHeight = 16.sp)
         }
 
-        OutlinedTextField(
+        PocketSearchField(
             value = search,
             onValueChange = { search = it },
-            modifier = Modifier.fillMaxWidth(),
-            label = { Text("Поиск скила", color = Muted, fontSize = 11.sp) },
-            singleLine = true,
-            shape = RoundedCornerShape(13.dp),
-            colors = skillFieldColors()
+            placeholder = "Поиск по названию, id или описанию"
         )
 
         Button(
@@ -124,8 +120,9 @@ fun SkillsScreen(vm: PocketViewModel) {
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
+                            .clip(RoundedCornerShape(10.dp))
                             .clickable { editing = skill }
-                            .padding(vertical = 4.dp),
+                            .padding(horizontal = 4.dp, vertical = 7.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Column(Modifier.weight(1f)) {
@@ -147,14 +144,18 @@ fun SkillsScreen(vm: PocketViewModel) {
                                 )
                             }
                         }
-                        Text(
-                            skillSource(skill),
-                            color = when (skillSource(skill)) {
-                                "builtin" -> Dim
-                                "project" -> Mint
-                                else -> Accent
+                        Spacer(Modifier.size(8.dp))
+                        StatusPill(
+                            when (skillSource(skill)) {
+                                "project" -> "проект"
+                                "global" -> "глобальный"
+                                else -> "встроенный"
                             },
-                            fontSize = 9.5.sp
+                            when (skillSource(skill)) {
+                                "project" -> Mint
+                                "global" -> Accent
+                                else -> Dim
+                            }
                         )
                     }
                 }
@@ -325,15 +326,4 @@ private fun skillBody(content: String): String {
 }
 
 @Composable
-private fun skillFieldColors() = OutlinedTextFieldDefaults.colors(
-    focusedBorderColor = Accent.copy(alpha = 0.5f),
-    unfocusedBorderColor = Line,
-    focusedContainerColor = Card2,
-    unfocusedContainerColor = Card2,
-    cursorColor = Accent,
-    focusedTextColor = TextMain,
-    unfocusedTextColor = TextMain,
-    disabledTextColor = Muted,
-    disabledBorderColor = Line,
-    disabledContainerColor = Card
-)
+private fun skillFieldColors() = pocketFieldColors()

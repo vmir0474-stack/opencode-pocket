@@ -70,11 +70,10 @@ private fun PermissionDialog(vm: PocketViewModel, request: PermissionAsk) {
         containerColor = Card,
         icon = {
             Text(
-                "РАЗРЕШЕНИЕ",
+                "Разрешение",
                 color = Warn,
-                fontSize = 9.5.sp,
-                fontWeight = FontWeight.Bold,
-                letterSpacing = 1.6.sp
+                fontSize = 11.5.sp,
+                fontWeight = FontWeight.SemiBold
             )
         },
         title = {
@@ -184,11 +183,10 @@ private fun FormDialog(vm: PocketViewModel, form: FormSpec) {
         properties = DialogProperties(decorFitsSystemWindows = false),
         icon = {
             Text(
-                "ФОРМА",
+                "Форма",
                 color = Accent,
-                fontSize = 9.5.sp,
-                fontWeight = FontWeight.Bold,
-                letterSpacing = 1.6.sp
+                fontSize = 11.5.sp,
+                fontWeight = FontWeight.SemiBold
             )
         },
         title = {
@@ -304,7 +302,7 @@ private fun FormFieldEditor(field: FormFieldSpec, values: MutableMap<String, Any
                         checked = values[field.key] == true,
                         onCheckedChange = { values[field.key] = it },
                         colors = SwitchDefaults.colors(
-                            checkedThumbColor = Color(0xFF171128),
+                            checkedThumbColor = Color(0xFF241505),
                             checkedTrackColor = Accent,
                             uncheckedThumbColor = Muted,
                             uncheckedTrackColor = Card2,
@@ -343,7 +341,7 @@ private fun FormFieldEditor(field: FormFieldSpec, values: MutableMap<String, Any
                             },
                             colors = CheckboxDefaults.colors(
                                 checkedColor = Accent,
-                                checkmarkColor = Color(0xFF171128),
+                                checkmarkColor = Color(0xFF241505),
                                 uncheckedColor = Dim
                             )
                         )

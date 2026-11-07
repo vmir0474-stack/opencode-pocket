@@ -89,7 +89,7 @@ fun DebugSheet(onDismiss: () -> Unit) {
                 modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp)
             ) {
                 Column(Modifier.padding(12.dp)) {
-                    Text("Токен", color = Dim, fontSize = 9.5.sp, letterSpacing = 1.2.sp)
+                    Text("Токен", color = Muted, fontSize = 11.sp)
                     Text(
                         masked,
                         color = TextMain,

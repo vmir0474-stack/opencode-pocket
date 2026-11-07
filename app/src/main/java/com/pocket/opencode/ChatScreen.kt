@@ -42,7 +42,9 @@ import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.Send
 import androidx.compose.material.icons.filled.Warning
+import androidx.compose.material.icons.outlined.Add
 import androidx.compose.material.icons.outlined.AutoAwesome
+import androidx.compose.material.icons.outlined.ContentCopy
 import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Button
@@ -149,24 +151,52 @@ private fun ContextBar(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .horizontalScroll(rememberScrollState())
-            .padding(horizontal = 16.dp, vertical = 6.dp),
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
+            .padding(start = 16.dp, end = 8.dp, top = 6.dp, bottom = 6.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        ChipButton(
-            label = vm.sessionLabel,
-            accent = true,
-            maxWidth = 230.dp,
-            onClick = onSessions
-        )
-        ChipButton(label = vm.modelLabel, maxWidth = 210.dp, onClick = onModels)
-        vm.variantLabel?.let {
-            ChipButton(label = it.uppercase(Locale.getDefault()), tone = AccentDim) { onModels() }
+        Row(
+            modifier = Modifier
+                .weight(1f)
+                .horizontalScroll(rememberScrollState()),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            ChipButton(
+                label = vm.sessionLabel,
+                accent = true,
+                maxWidth = 220.dp,
+                onClick = onSessions
+            )
+            ChipButton(label = vm.modelLabel, maxWidth = 200.dp, onClick = onModels)
+            vm.variantLabel?.let {
+                ChipButton(label = it, tone = AccentDim, onClick = onModels)
+            }
+            ChipButton(label = vm.agentLabel, onClick = onAgents)
+            if (vm.usageLabel.isNotBlank()) {
+                MetricPill(vm.usageLabel, Mint)
+            }
         }
-        ChipButton(label = vm.agentLabel, onClick = onAgents)
-        if (vm.usageLabel.isNotBlank()) {
-            ChipButton(label = vm.usageLabel, tone = Color(0xFF13241F))
+        Spacer(Modifier.width(6.dp))
+        val canStart = vm.status == ConnState.CONNECTED && !vm.busy
+        Box(
+            modifier = Modifier
+                .size(38.dp)
+                .clip(CircleShape)
+                .background(if (canStart) Accent.copy(alpha = 0.14f) else Color.Transparent)
+                .border(
+                    1.dp,
+                    if (canStart) Accent.copy(alpha = 0.3f) else Line.copy(alpha = 0.5f),
+                    CircleShape
+                )
+                .clickable(enabled = canStart) { vm.newSession() },
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(
+                Icons.Outlined.Add,
+                contentDescription = "Новый чат",
+                tint = if (canStart) Accent else Dim,
+                modifier = Modifier.size(20.dp)
+            )
         }
     }
 }
@@ -329,28 +359,29 @@ private fun EmptyChatState(vm: PocketViewModel) {
     ) {
         Box(
             modifier = Modifier
-                .size(70.dp)
-                .clip(RoundedCornerShape(22.dp))
+                .size(74.dp)
+                .clip(RoundedCornerShape(24.dp))
                 .background(
                     Brush.linearGradient(
-                        listOf(AccentDim, Color(0xFF1B1436))
+                        listOf(Color(0xFF2A2116), Color(0xFF161A21))
                     )
                 )
-                .border(1.dp, Accent.copy(alpha = 0.32f), RoundedCornerShape(22.dp)),
+                .border(1.dp, Accent.copy(alpha = 0.32f), RoundedCornerShape(24.dp)),
             contentAlignment = Alignment.Center
         ) {
             Icon(
                 Icons.Outlined.AutoAwesome,
                 contentDescription = null,
                 tint = Accent,
-                modifier = Modifier.size(27.dp)
+                modifier = Modifier.size(28.dp)
             )
         }
         Spacer(Modifier.height(20.dp))
         Text(
             "Опиши задачу",
             color = TextMain,
-            fontSize = 20.sp,
+            fontSize = 21.sp,
+            lineHeight = 27.sp,
             fontWeight = FontWeight.SemiBold,
             letterSpacing = (-0.2).sp
         )
@@ -362,12 +393,13 @@ private fun EmptyChatState(vm: PocketViewModel) {
             textAlign = TextAlign.Center,
             lineHeight = 18.sp
         )
-        Spacer(Modifier.height(8.dp))
+        Spacer(Modifier.height(10.dp))
         Row(
             modifier = Modifier
-                .clip(RoundedCornerShape(9.dp))
+                .clip(RoundedCornerShape(10.dp))
                 .background(Accent.copy(alpha = 0.08f))
-                .padding(horizontal = 10.dp, vertical = 5.dp),
+                .border(1.dp, Accent.copy(alpha = 0.16f), RoundedCornerShape(10.dp))
+                .padding(horizontal = 11.dp, vertical = 6.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             Text(
@@ -380,30 +412,43 @@ private fun EmptyChatState(vm: PocketViewModel) {
             Spacer(Modifier.width(6.dp))
             Text("приложить файл из workspace", color = Muted, fontSize = 10.5.sp)
         }
-        Spacer(Modifier.height(22.dp))
+        Spacer(Modifier.height(24.dp))
         suggestions.forEach { text ->
             Surface(
                 color = Card.copy(alpha = 0.86f),
-                shape = RoundedCornerShape(15.dp),
-                border = BorderStroke(1.dp, Line),
+                shape = RoundedCornerShape(16.dp),
+                border = BorderStroke(1.dp, Line.copy(alpha = 0.8f)),
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(vertical = 4.dp)
                     .clickable { vm.onInputChange(text) }
             ) {
                 Row(
-                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp),
+                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 13.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text(
                         text,
                         color = TextMain,
                         fontSize = 12.5.sp,
+                        lineHeight = 17.sp,
                         modifier = Modifier.weight(1f)
                     )
-                    Text("→", color = Dim, fontSize = 14.sp)
+                    Spacer(Modifier.width(8.dp))
+                    Text("→", color = Accent.copy(alpha = 0.7f), fontSize = 14.sp)
                 }
             }
+        }
+        if (vm.directoryLabel.isNotBlank()) {
+            Spacer(Modifier.height(18.dp))
+            Text(
+                vm.directoryLabel,
+                color = Dim,
+                fontSize = 10.sp,
+                fontFamily = FontFamily.Monospace,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
         }
     }
 }
@@ -415,6 +460,7 @@ private fun Composer(vm: PocketViewModel) {
     ) { uris -> vm.attachImages(uris) }
     val model = vm.selectedModelChoice
     val imagesBlocked = vm.attachments.isNotEmpty() && model != null && !model.supportsImages
+    val connected = vm.status == ConnState.CONNECTED
     Column(
         Modifier
             .fillMaxWidth()
@@ -428,7 +474,10 @@ private fun Composer(vm: PocketViewModel) {
         Surface(
             color = Card2.copy(alpha = 0.98f),
             shape = RoundedCornerShape(26.dp),
-            border = BorderStroke(1.dp, Accent.copy(alpha = 0.22f)),
+            border = BorderStroke(
+                1.dp,
+                if (connected) Accent.copy(alpha = 0.22f) else Line.copy(alpha = 0.8f)
+            ),
             shadowElevation = 12.dp
         ) {
             Column {
@@ -440,8 +489,7 @@ private fun Composer(vm: PocketViewModel) {
                     verticalAlignment = Alignment.Bottom
                 ) {
                     AttachButton(
-                        enabled = vm.status == ConnState.CONNECTED &&
-                            !vm.attachmentBusy && vm.attachments.size < 6
+                        enabled = connected && !vm.attachmentBusy && vm.attachments.size < 6
                     ) { picker.launch("image/*") }
                     OutlinedTextField(
                         value = vm.input,
@@ -449,7 +497,7 @@ private fun Composer(vm: PocketViewModel) {
                         modifier = Modifier.weight(1f),
                         placeholder = {
                             Text(
-                                if (vm.status == ConnState.CONNECTED) {
+                                if (connected) {
                                     "Задача агенту…  @ — файл"
                                 } else {
                                     "Нет связи с сервером"
@@ -480,10 +528,33 @@ private fun Composer(vm: PocketViewModel) {
                         StopButton { vm.interrupt() }
                     } else {
                         val enabled = (vm.input.isNotBlank() || vm.attachments.isNotEmpty()) &&
-                            vm.status == ConnState.CONNECTED && !vm.busy && !vm.attachmentBusy
+                            connected && !vm.busy && !vm.attachmentBusy
                         SendButton(enabled) { vm.send() }
                     }
                 }
+            }
+        }
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(start = 8.dp, end = 8.dp, top = 5.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                model?.name ?: vm.modelLabel,
+                color = Dim,
+                fontSize = 9.5.sp,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.weight(1f)
+            )
+            if (vm.attachments.isNotEmpty()) {
+                Text(
+                    "${vm.attachments.size}/6",
+                    color = Muted,
+                    fontSize = 9.5.sp,
+                    fontFamily = FontFamily.Monospace
+                )
             }
         }
     }
@@ -513,11 +584,10 @@ private fun MentionPanel(vm: PocketViewModel) {
                 )
                 Spacer(Modifier.width(7.dp))
                 Text(
-                    "ФАЙЛЫ WORKSPACE",
-                    color = Dim,
-                    fontSize = 9.sp,
-                    fontWeight = FontWeight.Bold,
-                    letterSpacing = 1.3.sp,
+                    "Файлы workspace",
+                    color = Muted,
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.SemiBold,
                     modifier = Modifier.weight(1f)
                 )
                 if (vm.mentionBusy) {
@@ -778,12 +848,12 @@ private fun UserBubble(message: UiMessage) {
                         .clip(RoundedCornerShape(20.dp, 20.dp, 6.dp, 20.dp))
                         .background(
                             Brush.linearGradient(
-                                listOf(Color(0xFF7C5CFF), Color(0xFF4B2DB8))
+                                listOf(Color(0xFF2B2318), Color(0xFF1D2028))
                             )
                         )
                         .border(
                             1.dp,
-                            Color.White.copy(alpha = 0.12f),
+                            Accent.copy(alpha = 0.22f),
                             RoundedCornerShape(20.dp, 20.dp, 6.dp, 20.dp)
                         )
                 ) {
@@ -812,6 +882,10 @@ private fun UserBubble(message: UiMessage) {
 
 @Composable
 private fun AssistantMessage(message: UiMessage, live: Boolean) {
+    val clipboard = LocalClipboardManager.current
+    val plain = remember(message.blocks) {
+        message.blocks.filterIsInstance<UiBlock.Text>().joinToString("\n\n") { it.content }
+    }
     Column(Modifier.fillMaxWidth()) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Box(
@@ -820,7 +894,7 @@ private fun AssistantMessage(message: UiMessage, live: Boolean) {
                     .clip(RoundedCornerShape(9.dp))
                     .background(
                         Brush.linearGradient(
-                            listOf(AccentDim, Color(0xFF1B1438))
+                            listOf(Color(0xFF2A2116), Color(0xFF171B22))
                         )
                     )
                     .border(1.dp, Accent.copy(alpha = 0.28f), RoundedCornerShape(9.dp)),
@@ -846,6 +920,23 @@ private fun AssistantMessage(message: UiMessage, live: Boolean) {
                 overflow = TextOverflow.Ellipsis,
                 modifier = Modifier.weight(1f)
             )
+            if (plain.isNotBlank()) {
+                Box(
+                    modifier = Modifier
+                        .size(30.dp)
+                        .clip(CircleShape)
+                        .clickable { clipboard.setText(AnnotatedString(plain)) },
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        Icons.Outlined.ContentCopy,
+                        contentDescription = "Копировать ответ",
+                        tint = Dim,
+                        modifier = Modifier.size(15.dp)
+                    )
+                }
+                Spacer(Modifier.width(2.dp))
+            }
             Text(timeLabel(message.createdAt), color = Dim, fontSize = 9.5.sp)
         }
         Spacer(Modifier.height(9.dp))
@@ -969,10 +1060,12 @@ private fun CodeBlock(lang: String, code: String) {
                 )
                 Spacer(Modifier.width(8.dp))
                 Text(
-                    lang.ifBlank { "код" }.uppercase(Locale.getDefault()),
-                    color = Dim,
-                    fontSize = 9.5.sp,
-                    letterSpacing = 1.4.sp,
+                    lang.ifBlank { "код" },
+                    color = Muted,
+                    fontSize = 10.5.sp,
+                    fontFamily = FontFamily.Monospace,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
                     modifier = Modifier.weight(1f)
                 )
                 TextButton(
@@ -986,7 +1079,7 @@ private fun CodeBlock(lang: String, code: String) {
             SelectionContainer {
                 Text(
                     annotated,
-                    color = Color(0xFFD8D5E8),
+                    color = Color(0xFFE2DDD2),
                     fontFamily = FontFamily.Monospace,
                     fontSize = 11.5.sp,
                     lineHeight = 17.sp,
@@ -1012,11 +1105,10 @@ private fun ReasoningBlock(block: UiBlock.Reasoning, live: Boolean) {
             verticalAlignment = Alignment.CenterVertically
         ) {
             Text(
-                "РАЗМЫШЛЕНИЯ",
-                color = Accent.copy(alpha = 0.85f),
-                fontSize = 9.5.sp,
-                fontWeight = FontWeight.Bold,
-                letterSpacing = 1.5.sp
+                "Размышления",
+                color = Accent.copy(alpha = 0.9f),
+                fontSize = 11.5.sp,
+                fontWeight = FontWeight.SemiBold
             )
             if (live || block.streaming) {
                 Spacer(Modifier.width(7.dp))
@@ -1141,18 +1233,18 @@ private fun ToolBlock(block: UiBlock.Tool) {
                 HorizontalDivider(color = Line)
                 Column(Modifier.padding(12.dp)) {
                     if (patches.isNotEmpty()) {
-                        BlockLabel(if (patches.size == 1) "ИЗМЕНЕНИЯ" else "ИЗМЕНЕНИЯ · ${patches.size}")
+                        BlockLabel(if (patches.size == 1) "Изменения" else "Изменения · ${patches.size}")
                         patches.forEachIndexed { index, patch ->
                             if (index > 0) Spacer(Modifier.height(10.dp))
                             EditDiffView(patch)
                         }
                     } else if (prettyInput.isNotBlank() && prettyInput != summary) {
-                        BlockLabel("ВХОД")
+                        BlockLabel("Вход")
                         ScrollableCode(prettyInput, maxHeight = 200.dp)
                     }
                     if (block.output.isNotBlank()) {
                         Spacer(Modifier.height(8.dp))
-                        BlockLabel(if (block.shellId != null) "ВЫВОД КОМАНДЫ" else "РЕЗУЛЬТАТ")
+                        BlockLabel(if (block.shellId != null) "Вывод команды" else "Результат")
                         ScrollableCode(block.output, maxHeight = 320.dp)
                     }
                     block.error?.takeIf { it.isNotBlank() }?.let { error ->
@@ -1277,12 +1369,12 @@ private fun EditDiffView(patch: EditPatch) {
             )
             else -> Column(Modifier.fillMaxWidth()) {
                 if (patch.old.isNotBlank()) {
-                    BlockLabel("БЫЛО")
+                    BlockLabel("Было")
                     ScrollableCode(patch.old, maxHeight = 140.dp)
                 }
                 if (patch.new.isNotBlank()) {
                     if (patch.old.isNotBlank()) Spacer(Modifier.height(6.dp))
-                    BlockLabel("СТАЛО")
+                    BlockLabel("Стало")
                     ScrollableCode(patch.new, maxHeight = 160.dp)
                 }
             }
@@ -1352,7 +1444,7 @@ private fun DiffRow(line: RustDiffLine) {
         )
         Text(
             line.text,
-            color = if (line.kind == 'h') Accent else Color(0xFFD5D2E4),
+            color = if (line.kind == 'h') Accent else Color(0xFFE2DDD2),
             fontSize = 10.sp,
             lineHeight = 14.sp,
             fontFamily = FontFamily.Monospace,
@@ -1383,11 +1475,10 @@ private fun TurnSummaryCard(vm: PocketViewModel, stats: TurnStats) {
                 )
                 Spacer(Modifier.width(7.dp))
                 Text(
-                    "ИТОГ ХОДА",
+                    "Итог хода",
                     color = Accent,
-                    fontSize = 9.5.sp,
-                    fontWeight = FontWeight.Bold,
-                    letterSpacing = 1.5.sp,
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.SemiBold,
                     modifier = Modifier.weight(1f)
                 )
                 TextButton(
@@ -1535,7 +1626,7 @@ private fun ShellBlock(shell: UiBlock.Shell) {
                 SelectionContainer {
                     Text(
                         shell.output,
-                        color = Color(0xFFD8D5E8),
+                        color = Color(0xFFE2DDD2),
                         fontFamily = FontFamily.Monospace,
                         fontSize = 11.5.sp,
                         lineHeight = 17.sp,
@@ -1574,10 +1665,9 @@ private fun SystemMessage(message: UiMessage) {
 private fun BlockLabel(text: String) {
     Text(
         text,
-        color = Dim,
-        fontSize = 9.sp,
-        fontWeight = FontWeight.Bold,
-        letterSpacing = 1.4.sp,
+        color = Muted,
+        fontSize = 10.5.sp,
+        fontWeight = FontWeight.SemiBold,
         modifier = Modifier.padding(bottom = 5.dp)
     )
 }
@@ -1587,7 +1677,7 @@ private fun ScrollableCode(text: String, maxHeight: androidx.compose.ui.unit.Dp)
     SelectionContainer {
         Text(
             text,
-            color = Color(0xFFCFCBE0),
+            color = Color(0xFFDCD7CC),
             fontFamily = FontFamily.Monospace,
             fontSize = 11.sp,
             lineHeight = 16.sp,

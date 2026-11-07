@@ -34,6 +34,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
@@ -59,14 +60,13 @@ fun ProvidersScreen(vm: PocketViewModel) {
             .padding(horizontal = 16.dp, vertical = 10.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Column(Modifier.weight(1f)) {
-                Text("Модели", color = TextMain, fontSize = 22.sp, fontWeight = FontWeight.Bold)
-                Text("Провайдеры и свои ключи", color = Muted, fontSize = 11.5.sp)
-            }
+        ScreenHeader(
+            title = "Модели",
+            subtitle = "Провайдеры, свои ключи и выбор модели"
+        ) {
             if (vm.providerBusy) {
                 CircularProgressIndicator(
-                    modifier = Modifier.size(16.dp),
+                    modifier = Modifier.size(18.dp),
                     color = Accent,
                     strokeWidth = 1.5.dp
                 )
@@ -125,15 +125,10 @@ fun ProvidersScreen(vm: PocketViewModel) {
         Panel {
             SectionTitle("Добавить провайдера")
             Spacer(Modifier.height(10.dp))
-            OutlinedTextField(
+            PocketSearchField(
                 value = search,
                 onValueChange = { search = it },
-                modifier = Modifier.fillMaxWidth(),
-                label = { Text("Поиск провайдера", color = Muted, fontSize = 11.sp) },
-                placeholder = { Text("anthropic, openai, openrouter…", color = Dim, fontSize = 12.sp) },
-                singleLine = true,
-                shape = RoundedCornerShape(13.dp),
-                colors = providerFieldColors()
+                placeholder = "Поиск: anthropic, openai, openrouter…"
             )
             Spacer(Modifier.height(8.dp))
             val all = vm.integrations.filter { ProviderCatalog.matches(it, search) }
@@ -178,14 +173,10 @@ fun ProvidersScreen(vm: PocketViewModel) {
         Panel {
             SectionTitle("Модели")
             Spacer(Modifier.height(10.dp))
-            OutlinedTextField(
+            PocketSearchField(
                 value = modelSearch,
                 onValueChange = { modelSearch = it },
-                modifier = Modifier.fillMaxWidth(),
-                label = { Text("Поиск модели", color = Muted, fontSize = 11.sp) },
-                singleLine = true,
-                shape = RoundedCornerShape(13.dp),
-                colors = providerFieldColors()
+                placeholder = "Поиск модели или провайдера"
             )
             Spacer(Modifier.height(10.dp))
             val filtered = vm.models.filter {
@@ -199,12 +190,11 @@ fun ProvidersScreen(vm: PocketViewModel) {
             } else {
                 filtered.groupBy { it.providerID }.forEach { (provider, list) ->
                     Text(
-                        provider.uppercase(),
-                        color = Dim,
-                        fontSize = 9.5.sp,
-                        fontWeight = FontWeight.Bold,
-                        letterSpacing = 1.5.sp,
-                        modifier = Modifier.padding(top = 6.dp, bottom = 3.dp)
+                        provider,
+                        color = Muted,
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        modifier = Modifier.padding(top = 8.dp, bottom = 4.dp)
                     )
                     list.forEach { model ->
                         val active = model.id == vm.selectedModelId &&
@@ -212,9 +202,10 @@ fun ProvidersScreen(vm: PocketViewModel) {
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
+                                .clip(RoundedCornerShape(10.dp))
                                 .clickable { vm.selectModel(model) }
                                 .background(if (active) AccentDim else Card)
-                                .padding(horizontal = 10.dp, vertical = 8.dp),
+                                .padding(horizontal = 10.dp, vertical = 9.dp),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             Column(Modifier.weight(1f)) {
@@ -336,12 +327,4 @@ private fun ProviderRow(provider: IntegrationInfo, onClick: () -> Unit) {
 }
 
 @Composable
-private fun providerFieldColors() = OutlinedTextFieldDefaults.colors(
-    focusedBorderColor = Accent.copy(alpha = 0.5f),
-    unfocusedBorderColor = Line,
-    focusedContainerColor = Card2,
-    unfocusedContainerColor = Card2,
-    cursorColor = Accent,
-    focusedTextColor = TextMain,
-    unfocusedTextColor = TextMain
-)
+private fun providerFieldColors() = pocketFieldColors()

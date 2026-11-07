@@ -55,12 +55,10 @@ fun SettingsScreen(vm: PocketViewModel) {
             .padding(horizontal = 16.dp, vertical = 10.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Column(Modifier.weight(1f)) {
-                Text("Связь", color = TextMain, fontSize = 22.sp, fontWeight = FontWeight.Bold)
-                Text("OpenCode Server API v2", color = Muted, fontSize = 11.5.sp)
-            }
-        }
+        ScreenHeader(
+            title = "Связь",
+            subtitle = "OpenCode Server API v2 · встроенный и внешний режим"
+        )
 
         ServerPanel(vm)
         WorkspacePanel(vm)
@@ -399,7 +397,7 @@ private fun McpPanel(vm: PocketViewModel) {
                     Text(
                         server.status + server.error.takeIf { it.isNotBlank() }?.let { " · $it" }.orEmpty(),
                         color = when (server.status) {
-                            "connected" -> Accent
+                            "connected" -> Mint
                             "failed", "needs_auth" -> Danger
                             else -> Muted
                         },
@@ -512,12 +510,4 @@ private fun McpPanel(vm: PocketViewModel) {
 }
 
 @Composable
-private fun fieldColors() = OutlinedTextFieldDefaults.colors(
-    focusedBorderColor = Accent.copy(alpha = 0.5f),
-    unfocusedBorderColor = Line,
-    focusedContainerColor = Card2,
-    unfocusedContainerColor = Card2,
-    cursorColor = Accent,
-    focusedTextColor = TextMain,
-    unfocusedTextColor = TextMain
-)
+private fun fieldColors() = pocketFieldColors()
