@@ -134,6 +134,7 @@ object EmbeddedServer {
             buildMap {
                 put("dir", tools.dir.absolutePath)
                 tools.rg?.let { put("rg", it.absolutePath) }
+                tools.pocketRust?.let { put("pocket-rs", it.absolutePath) }
                 if (tools.version.isNotBlank()) put("version", tools.version.lineSequence().first())
                 if (tools.error.isNotBlank()) put("error", tools.error)
             },

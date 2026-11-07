@@ -12,8 +12,8 @@ android {
         applicationId = "com.pocket.opencode"
         minSdk = 26
         targetSdk = 35
-        versionCode = 4
-        versionName = "0.4.0"
+        versionCode = 5
+        versionName = "0.5.0"
     }
 
     buildFeatures { compose = true }
@@ -29,6 +29,7 @@ android {
             // ему не нужен и может повредить образ.
             keepDebugSymbols += "**/libocserver.so"
             keepDebugSymbols += "**/librg.so"
+            keepDebugSymbols += "**/libpocket_rs.so"
         }
     }
 

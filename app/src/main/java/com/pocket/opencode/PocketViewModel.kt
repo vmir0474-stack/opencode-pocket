@@ -111,11 +111,15 @@ class PocketViewModel(application: Application) : AndroidViewModel(application) 
     var attachments by mutableStateOf<List<Attachment>>(emptyList())
     var attachmentBusy by mutableStateOf(false)
     var attachmentNote by mutableStateOf("")
+    var mentionQuery by mutableStateOf<String?>(null)
+    var mentionResults by mutableStateOf<List<FileHit>>(emptyList())
+    var mentionBusy by mutableStateOf(false)
 
     private var connectionJob: Job? = null
     private var refreshJob: Job? = null
     private var cacheJob: Job? = null
     private var settingsJob: Job? = null
+    private var mentionJob: Job? = null
     private var embeddedKey: String? = null
     private val shellJobs = mutableMapOf<String, Job>()
     private val pendingShells = mutableMapOf<String, Job>()
@@ -163,6 +167,7 @@ class PocketViewModel(application: Application) : AndroidViewModel(application) 
         DebugBridge.stateProvider = { debugState() }
         DebugBridge.actionHandler = { name, args -> debugAction(name, args) }
         DebugLog.event("app", "view model ready")
+        viewModelScope.launch(Dispatchers.IO) { RustTools.ensure(getApplication()) }
         val saved = settings.sessionId
         if (saved != null) {
             viewModelScope.launch {
@@ -444,7 +449,51 @@ class PocketViewModel(application: Application) : AndroidViewModel(application) 
     fun onInputChange(value: String) {
         input = value
         queueSave()
+        refreshMentions(value)
     }
+
+    fun applyMention(hit: FileHit) {
+        val trigger = mentionTrigger(input) ?: return
+        input = insertMentionRef(input, trigger.at, hit.path)
+        queueSave()
+        mentionJob?.cancel()
+        mentionQuery = null
+        mentionResults = emptyList()
+        mentionBusy = false
+    }
+
+    fun dismissMentions() {
+        mentionJob?.cancel()
+        mentionQuery = null
+        mentionResults = emptyList()
+        mentionBusy = false
+    }
+
+    private fun refreshMentions(value: String) {
+        val trigger = mentionTrigger(value)
+        if (trigger == null) {
+            dismissMentions()
+            return
+        }
+        mentionQuery = trigger.query
+        mentionJob?.cancel()
+        mentionJob = viewModelScope.launch {
+            mentionBusy = true
+            delay(150)
+            val root = indexRoot()
+            val hits = withContext(Dispatchers.IO) {
+                RustTools.find(getApplication(), root, trigger.query, 10)
+            }
+            if (mentionQuery == trigger.query) {
+                mentionResults = hits
+                mentionBusy = false
+            }
+        }
+    }
+
+    private fun indexRoot(): String =
+        sessionDirectory.ifBlank { location?.directory.orEmpty() }
+            .ifBlank { workspacePath.ifBlank { Workspace.defaultPath() } }
 
     fun attachImages(uris: List<Uri>) {
         if (uris.isEmpty() || attachmentBusy) return
@@ -1159,6 +1208,10 @@ class PocketViewModel(application: Application) : AndroidViewModel(application) 
         input = ""
         settings.draft = ""
         attachmentNote = ""
+        mentionJob?.cancel()
+        mentionQuery = null
+        mentionResults = emptyList()
+        mentionBusy = false
         viewModelScope.launch {
             busy = true
             try {

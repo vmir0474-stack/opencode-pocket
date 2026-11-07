@@ -3,6 +3,7 @@ package com.pocket.opencode
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -31,6 +32,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
@@ -50,16 +52,16 @@ private val dockItems = listOf(
 @Composable
 fun PocketDock(selected: Int, pending: Int, onSelect: (Int) -> Unit) {
     Surface(
-        shape = RoundedCornerShape(30.dp),
-        color = Card.copy(alpha = 0.97f),
-        border = BorderStroke(1.dp, Color.White.copy(alpha = 0.07f)),
-        shadowElevation = 18.dp
+        shape = RoundedCornerShape(26.dp),
+        color = Card2.copy(alpha = 0.96f),
+        border = BorderStroke(1.dp, Accent.copy(alpha = 0.14f)),
+        shadowElevation = 20.dp
     ) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .height(62.dp)
-                .padding(horizontal = 6.dp),
+                .height(64.dp)
+                .padding(horizontal = 8.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             dockItems.forEachIndexed { index, item ->
@@ -68,21 +70,49 @@ fun PocketDock(selected: Int, pending: Int, onSelect: (Int) -> Unit) {
                     targetValue = if (active) Accent else Dim,
                     label = "dockLabel"
                 )
+                val iconColor by animateColorAsState(
+                    targetValue = if (active) Accent else Muted,
+                    label = "dockIcon"
+                )
                 Column(
                     modifier = Modifier
                         .weight(1f)
                         .fillMaxHeight()
                         .clip(RoundedCornerShape(18.dp))
                         .clickable { onSelect(index) }
-                        .padding(vertical = 6.dp),
+                        .padding(vertical = 5.dp),
                     horizontalAlignment = Alignment.CenterHorizontally,
                     verticalArrangement = Arrangement.Center
                 ) {
                     Box(
                         modifier = Modifier
-                            .size(width = 44.dp, height = 30.dp)
+                            .size(width = 46.dp, height = 30.dp)
                             .clip(RoundedCornerShape(15.dp))
-                            .background(if (active) Accent.copy(alpha = 0.15f) else Color.Transparent),
+                            .background(
+                                if (active) {
+                                    Brush.linearGradient(
+                                        listOf(
+                                            Accent.copy(alpha = 0.24f),
+                                            Accent2.copy(alpha = 0.14f)
+                                        )
+                                    )
+                                } else {
+                                    Brush.linearGradient(
+                                        listOf(Color.Transparent, Color.Transparent)
+                                    )
+                                }
+                            )
+                            .then(
+                                if (active) {
+                                    Modifier.border(
+                                        1.dp,
+                                        Accent.copy(alpha = 0.24f),
+                                        RoundedCornerShape(15.dp)
+                                    )
+                                } else {
+                                    Modifier
+                                }
+                            ),
                         contentAlignment = Alignment.Center
                     ) {
                         BadgedBox(
@@ -100,8 +130,8 @@ fun PocketDock(selected: Int, pending: Int, onSelect: (Int) -> Unit) {
                             Icon(
                                 item.icon,
                                 contentDescription = item.label,
-                                tint = if (active) Accent else Muted,
-                                modifier = Modifier.size(21.dp)
+                                tint = iconColor,
+                                modifier = Modifier.size(20.dp)
                             )
                         }
                     }
@@ -109,8 +139,9 @@ fun PocketDock(selected: Int, pending: Int, onSelect: (Int) -> Unit) {
                     Text(
                         item.label,
                         color = labelColor,
-                        fontSize = 9.5.sp,
-                        fontWeight = if (active) FontWeight.SemiBold else FontWeight.Medium
+                        fontSize = 9.sp,
+                        fontWeight = if (active) FontWeight.SemiBold else FontWeight.Medium,
+                        letterSpacing = if (active) 0.2.sp else 0.sp
                     )
                 }
             }

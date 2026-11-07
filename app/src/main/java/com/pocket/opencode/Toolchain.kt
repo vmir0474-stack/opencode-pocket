@@ -25,6 +25,7 @@ object Toolchain {
         val rg: File? = null,
         val version: String = "",
         val error: String = "",
+        val pocketRust: File? = null,
     ) {
         val ok: Boolean get() = rg != null && error.isBlank()
     }
@@ -53,11 +54,20 @@ object Toolchain {
         runCatching { linkTo(link, source) }
             .onFailure { return Status(dir, error = "symlink: ${it.message}") }
 
+        // Нативный Rust-инструмент: find/diff/highlight для чата.
+        val rustSource = File(nativeDir, "libpocket_rs.so")
+        val rustLink = File(dir, "pocket-rs")
+        val pocketRust = if (rustSource.isFile) {
+            runCatching { linkTo(rustLink, rustSource); rustLink }.getOrNull()
+        } else {
+            null
+        }
+
         val test = selfTest(link, nativeDir)
         return if (test.first == 0) {
-            Status(dir, link, test.second.trim(), "")
+            Status(dir, link, test.second.trim(), "", pocketRust)
         } else {
-            Status(dir, link, "", test.second.trim().ifBlank { "rg завершился с кодом ${test.first}" })
+            Status(dir, link, "", test.second.trim().ifBlank { "rg завершился с кодом ${test.first}" }, pocketRust)
         }
     }
 

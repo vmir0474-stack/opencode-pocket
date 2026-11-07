@@ -33,19 +33,20 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 
-val Bg = Color(0xFF08070E)
-val Card = Color(0xFF12111D)
-val Card2 = Color(0xFF1A1828)
-val Line = Color(0xFF2A2740)
-val Accent = Color(0xFFA78BFA)
-val AccentDim = Color(0xFF2B2347)
-val Mint = Color(0xFF6EE7C8)
-val TextMain = Color(0xFFF4F1FB)
-val Muted = Color(0xFF9490A8)
-val Dim = Color(0xFF6B6780)
-val Danger = Color(0xFFFF7A8A)
+val Bg = Color(0xFF07060D)
+val Card = Color(0xFF100E1B)
+val Card2 = Color(0xFF181526)
+val Line = Color(0xFF2B2742)
+val Accent = Color(0xFFB7A2FF)
+val Accent2 = Color(0xFF7B5BFF)
+val AccentDim = Color(0xFF2A2050)
+val Mint = Color(0xFF6FE7C6)
+val TextMain = Color(0xFFF5F2FC)
+val Muted = Color(0xFF9B96B0)
+val Dim = Color(0xFF6E6884)
+val Danger = Color(0xFFFF7E93)
 val Warn = Color(0xFFFFC46B)
-val CodeBg = Color(0xFF0B0A12)
+val CodeBg = Color(0xFF0A0812)
 
 @Composable
 fun PocketTheme(content: @Composable () -> Unit) {

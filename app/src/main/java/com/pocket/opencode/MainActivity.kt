@@ -102,7 +102,7 @@ fun PocketApp(vm: PocketViewModel) {
             .fillMaxSize()
             .background(
                 Brush.verticalGradient(
-                    listOf(Color(0xFF0B0916), Bg, Color(0xFF06060C))
+                    listOf(Color(0xFF0C0918), Bg, Color(0xFF050409))
                 )
             )
     ) {
@@ -164,7 +164,7 @@ private fun PocketHeader(vm: PocketViewModel, onDebug: () -> Unit) {
             modifier = Modifier
                 .size(32.dp)
                 .clip(RoundedCornerShape(10.dp))
-                .background(Brush.linearGradient(listOf(Accent, Color(0xFF6A4FE0))))
+                .background(Brush.linearGradient(listOf(Accent, Accent2)))
                 .pointerInput(Unit) {
                     detectTapGestures(onLongPress = { onDebug() })
                 },
