@@ -73,9 +73,18 @@ class MainActivity : ComponentActivity() {
             checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) !=
             PackageManager.PERMISSION_GRANTED
         ) {
-            requestPermissions(arrayOf(Manifest.permission.POST_NOTIFICATIONS), 1)
+            requestPermissions(arrayOf(Manifest.permission.POST_NOTIFICATIONS), REQ_NOTIFICATIONS)
         }
         if (SettingsStore(this).mode == ServerMode.EMBEDDED) {
+            // На Android 8–10 каталог /sdcard/OpenCode открывается обычным
+            // runtime-разрешением. На 11+ используется отдельный экран
+            // «Доступ ко всем файлам» из настроек приложения.
+            if (Workspace.needsLegacyStoragePermission(this)) {
+                requestPermissions(
+                    arrayOf(Manifest.permission.WRITE_EXTERNAL_STORAGE),
+                    REQ_STORAGE
+                )
+            }
             ServerService.start(this)
         }
         setContent {
@@ -83,6 +92,11 @@ class MainActivity : ComponentActivity() {
                 PocketApp(vm)
             }
         }
+    }
+
+    private companion object {
+        const val REQ_NOTIFICATIONS = 1
+        const val REQ_STORAGE = 2
     }
 }
 

@@ -64,6 +64,7 @@ fun SettingsScreen(vm: PocketViewModel) {
 
         ServerPanel(vm)
         WorkspacePanel(vm)
+        EnvironmentPanel(vm)
         QuotaPanel(vm)
         MigrationPanel(vm)
         McpPanel(vm)

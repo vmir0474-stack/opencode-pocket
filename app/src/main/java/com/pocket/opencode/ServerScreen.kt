@@ -178,10 +178,16 @@ fun WorkspacePanel(vm: PocketViewModel) {
             )
         }
         Spacer(Modifier.height(8.dp))
+        val modernStorage = android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.R
         Text(
-            "Android выдаёт этот доступ только в системных настройках: " +
-                "«Настройки → Приложения → OpenCode Pocket → Доступ ко всем файлам». " +
-                "После выдачи вернись в приложение — сервер перезапустится сам.",
+            if (modernStorage) {
+                "Android выдаёт этот доступ только в системных настройках: " +
+                    "«Настройки → Приложения → OpenCode Pocket → Доступ ко всем файлам». " +
+                    "После выдачи вернись в приложение — сервер перезапустится сам."
+            } else {
+                "На Android 8–10 достаточно разрешить «Память» в свойствах приложения. " +
+                    "После выдачи вернись в приложение — сервер перезапустится сам."
+            },
             color = Dim,
             fontSize = 10.5.sp,
             lineHeight = 15.sp
@@ -193,7 +199,11 @@ fun WorkspacePanel(vm: PocketViewModel) {
             modifier = Modifier.fillMaxWidth()
         ) {
             Text(
-                if (vm.hasAllFilesAccess) "Открыть настройки доступа" else "Выдать доступ ко всем файлам",
+                when {
+                    vm.hasAllFilesAccess -> "Открыть настройки доступа"
+                    modernStorage -> "Выдать доступ ко всем файлам"
+                    else -> "Разрешить доступ к памяти"
+                },
                 fontSize = 11.5.sp
             )
         }
@@ -237,7 +247,12 @@ fun WorkspacePanel(vm: PocketViewModel) {
         }
         Spacer(Modifier.height(10.dp))
         val accessText = when {
-            !vm.hasAllFilesAccess -> "Нет «Доступа ко всем файлам» — /sdcard недоступен"
+            !vm.hasAllFilesAccess ->
+                if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.R) {
+                    "Нет «Доступа ко всем файлам» — /sdcard недоступен"
+                } else {
+                    "Нет разрешения на память — /sdcard недоступен"
+                }
             vm.workspaceUsable -> "Каталог доступен для записи"
             else -> "Каталог ещё не создан или недоступен"
         }

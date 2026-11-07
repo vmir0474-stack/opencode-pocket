@@ -140,6 +140,25 @@ object EmbeddedServer {
             },
         )
 
+        // До старта сервера фиксируем реальное окружение: список команд,
+        // доступ к хранилищу и батарее. Агент получает его как instructions,
+        // иначе на телефоне без root он пробует git/node/python, которых нет.
+        runCatching { Environment.prepare(context, paths, actualWorkspace) }
+            .onSuccess { report ->
+                DebugLog.event(
+                    "environment",
+                    "instructions ready",
+                    buildMap {
+                        put("sdk", report.sdk.toString())
+                        put("storage", report.storageMode)
+                        put("battery_exempt", report.batteryExempt.toString())
+                        put("available", report.availableNames.joinToString(","))
+                        put("missing", report.missing.joinToString(","))
+                    },
+                )
+            }
+            .onFailure { DebugLog.error("environment", it) }
+
         val nativeDir = File(context.applicationInfo.nativeLibraryDir)
         val bin = File(nativeDir, "libocserver.so")
         if (!bin.isFile) {

@@ -5,7 +5,20 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE"/>
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
     <uses-permission android:name="android.permission.MANAGE_EXTERNAL_STORAGE"/>
-    <uses-permission android:name="android.permission.WAKE_LOCK"/>
+    <!-- Android 8–10: обычный доступ к общему хранилищу. На 11+ его заменяет MANAGE_EXTERNAL_STORAGE. -->
+    <uses-permission
+        android:name="android.permission.READ_EXTERNAL_STORAGE"
+        android:maxSdkVersion="29"/>
+    <uses-permission
+        android:name="android.permission.WRITE_EXTERNAL_STORAGE"
+        android:maxSdkVersion="29"/>
+    <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS"/>
+    <!-- Чтобы выбрать штатный диалог разрешения батареи, а не «чем открыть». -->
+    <queries>
+        <intent>
+            <action android:name="android.settings.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS"/>
+        </intent>
+    </queries>
     <application
         android:name=".PocketApplication"
         android:theme="@style/Theme.OpenCodePocket"
@@ -14,6 +27,7 @@
         android:roundIcon="@mipmap/ic_launcher_round"
         android:usesCleartextTraffic="true"
         android:extractNativeLibs="true"
+        android:requestLegacyExternalStorage="true"
         android:allowBackup="false"
         android:supportsRtl="true">
         <activity

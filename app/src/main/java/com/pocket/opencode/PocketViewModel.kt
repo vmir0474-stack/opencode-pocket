@@ -94,6 +94,9 @@ class PocketViewModel(application: Application) : AndroidViewModel(application) 
     var configError by mutableStateOf("")
     var configLoaded by mutableStateOf(false)
 
+    var environment by mutableStateOf<EnvReport?>(null)
+    var environmentBusy by mutableStateOf(false)
+
     var migrationPath by mutableStateOf("/sdcard/OpenCode/import/opencode-backup.tar.gz")
     var migrationPreview by mutableStateOf<MigrationPreview?>(null)
     var migrationResult by mutableStateOf<MigrationResult?>(null)
@@ -192,6 +195,9 @@ class PocketViewModel(application: Application) : AndroidViewModel(application) 
         if (settings.mode != ServerMode.EMBEDDED) return
         when (status.state) {
             EmbeddedState.RUNNING -> {
+                // К этому моменту Toolchain уже создал symlink'и rg/pocket-rs,
+                // поэтому список команд можно показать без гонки со стартом.
+                refreshEnvironment()
                 val key = status.url + "|" + status.password
                 if (key != embeddedKey) {
                     embeddedKey = key
@@ -243,6 +249,13 @@ class PocketViewModel(application: Application) : AndroidViewModel(application) 
         )
         put("workspace", workspacePath)
         put("access", hasAllFilesAccess)
+        environment?.let { report ->
+            put("environment", JSONObject()
+                .put("storage", report.storageMode)
+                .put("batteryExempt", report.batteryExempt)
+                .put("available", JSONArray(report.availableNames))
+                .put("missing", JSONArray(report.missing)))
+        }
         put("session", sessionId ?: "")
         put("sessionTitle", sessionTitle)
         put("sessionDirectory", sessionDirectory)
@@ -379,6 +392,40 @@ class PocketViewModel(application: Application) : AndroidViewModel(application) 
 
     fun onAppResume() {
         refreshWorkspaceAccess()
+        refreshEnvironment()
+    }
+
+    /**
+     * Пересобирает список доступных команд для панели «Окружение». Проверяем
+     * тот же PATH, который получает сервер, поэтому результат совпадает с
+     * тем, что увидит агент.
+     */
+    fun refreshEnvironment() {
+        if (environmentBusy) return
+        environmentBusy = true
+        viewModelScope.launch {
+            val app = getApplication<Application>()
+            val paths = serverPaths()
+            val requested = File(workspacePath.ifBlank { Workspace.defaultPath() })
+            val actual = serverStatus.workspace
+                .takeIf { it.isNotBlank() }
+                ?.let(::File)
+                ?: requested
+            environment = withContext(Dispatchers.IO) {
+                runCatching {
+                    Environment.report(
+                        app,
+                        actual,
+                        listOf(Toolchain.toolsDir(paths), File("/system/bin"), File("/system/xbin")),
+                    )
+                }.getOrNull()
+            }
+            environmentBusy = false
+        }
+    }
+
+    fun openBatterySettings() {
+        Environment.openBatterySettings(getApplication())
     }
 
     /**
