@@ -14,6 +14,11 @@ android {
         targetSdk = 35
         versionCode = 5
         versionName = "0.5.0"
+
+        // Helio G85 / TECNO LE7n и остальные целевые телефоны — arm64.
+        // Остальные ABI не нужны: встроенные rg/pocket-rs собраны только
+        // под arm64, а stub-библиотеки только раздувают APK.
+        ndk { abiFilters += "arm64-v8a" }
     }
 
     buildFeatures { compose = true }
