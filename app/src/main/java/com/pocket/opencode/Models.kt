@@ -530,6 +530,19 @@ fun parseServerMessages(data: JSONArray): List<UiMessage> {
     return unique.values.toList()
 }
 
+/**
+ * Сервер отдаёт свежие сообщения первыми (order=desc), а лента рисуется
+ * в хронологическом порядке. Переставляем страницу перед разбором, чтобы
+ * дедупликация по ID тоже оставляла самую новую версию сообщения.
+ */
+fun parseServerMessagesNewestFirst(data: JSONArray): List<UiMessage> {
+    val ascending = JSONArray()
+    for (i in data.length() - 1 downTo 0) {
+        data.optJSONObject(i)?.let { ascending.put(it) }
+    }
+    return parseServerMessages(ascending)
+}
+
 fun UiMessage.toCacheJson(): JSONObject {
     val o = JSONObject()
     o.put("id", id)

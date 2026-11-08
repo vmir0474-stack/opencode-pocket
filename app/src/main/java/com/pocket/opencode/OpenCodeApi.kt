@@ -131,14 +131,17 @@ class OpenCodeApi {
     }
 
     suspend fun messages(base: String, password: String, sessionID: String): List<UiMessage> {
+        // order=asc отдаёт самые старые записи: после 200 сообщений новые
+        // ответы перестают попадать в выборку и исчезают из ленты. Берём
+        // последнюю страницу и разворачиваем её в хронологический порядок.
         val raw = call(
             request(
-                "${root(base)}/api/session/$sessionID/message?order=asc&limit=200",
+                "${root(base)}/api/session/$sessionID/message?order=desc&limit=200",
                 password
             ).get().build()
         )
         val arr = JSONObject(raw).optJSONArray("data") ?: JSONArray()
-        return parseServerMessages(arr)
+        return parseServerMessagesNewestFirst(arr)
     }
 
     suspend fun createSession(
