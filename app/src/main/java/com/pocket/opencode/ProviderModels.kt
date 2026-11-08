@@ -23,8 +23,38 @@ data class IntegrationInfo(
     val connections: List<IntegrationConnection>
 ) {
     val supportsKey: Boolean get() = methods.any { it.type == "key" }
+    val supportsOAuth: Boolean get() = methods.any { it.type == "oauth" }
+    val oauthMethodID: String?
+        get() = methods.firstOrNull { it.type == "oauth" && it.id.isNotBlank() }?.id
     val connected: Boolean get() = connections.isNotEmpty()
 }
+
+/** Device-code login started by the embedded server. */
+data class OAuthAttempt(
+    val id: String,
+    val url: String,
+    val instructions: String,
+    val mode: String,
+    val expires: Long
+)
+
+data class OAuthStatus(
+    val status: String,
+    val message: String? = null
+)
+
+fun parseOAuthAttempt(raw: JSONObject): OAuthAttempt = OAuthAttempt(
+    id = raw.optString("attemptID"),
+    url = raw.optString("url"),
+    instructions = raw.optString("instructions"),
+    mode = raw.optString("mode", "auto"),
+    expires = raw.optJSONObject("time")?.optLong("expires") ?: 0L
+)
+
+fun parseOAuthStatus(raw: JSONObject): OAuthStatus = OAuthStatus(
+    status = raw.optString("status"),
+    message = raw.optText("message")
+)
 
 data class CredentialInfo(
     val id: String,
@@ -108,7 +138,7 @@ object CredentialPayload {
 
 object ProviderCatalog {
     val curated = listOf(
-        "anthropic", "openai", "openrouter", "google",
+        "opencode", "anthropic", "openai", "openrouter", "google",
         "deepseek", "xai", "groq", "mistral"
     )
 

@@ -217,7 +217,7 @@ internal fun freeLimitText(now: Long = System.currentTimeMillis()): String {
         appendLine("Бесплатный лимит OpenCode исчерпан.")
         appendLine("Он не привязан к IP — VPN и смена адреса его не сбрасывают.")
         appendLine("Сброс в 00:00 UTC, через $left.")
-        append("Чтобы продолжить сейчас: вкладка «Модели» → добавь ключ провайдера или подписку OpenCode Go.")
+        append("Чтобы продолжить сейчас: вкладка «Модели» → «Войти» в OpenCode Console или ключ другого провайдера.")
     }
 }
 

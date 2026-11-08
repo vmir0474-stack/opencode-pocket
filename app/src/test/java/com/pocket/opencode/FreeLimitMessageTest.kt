@@ -38,6 +38,25 @@ class FreeLimitMessageTest {
     }
 
     @Test
+    fun `oauth attempt parses device url and code`() {
+        val attempt = parseOAuthAttempt(
+            JSONObject()
+                .put("attemptID", "con_1")
+                .put(
+                    "url",
+                    "https://opencode.ai/console/device?user_code=ABCD-EFGH&client_id=opencode-cli"
+                )
+                .put("instructions", "Enter code: ABCD-EFGH")
+                .put("mode", "auto")
+                .put("time", JSONObject().put("created", 1L).put("expires", 2L))
+        )
+        assertEquals("con_1", attempt.id)
+        assertTrue(attempt.url.contains("user_code=ABCD-EFGH"))
+        assertEquals("Enter code: ABCD-EFGH", attempt.instructions)
+        assertEquals(2L, attempt.expires)
+    }
+
+    @Test
     fun `error type survives the local cache`() {
         val message = UiMessage(
             id = "msg_1",

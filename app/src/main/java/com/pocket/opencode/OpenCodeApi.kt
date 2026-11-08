@@ -100,6 +100,9 @@ class OpenCodeApi {
             .post(body.toString().toRequestBody(jsonType))
             .build()
 
+    private fun postEmpty(url: String, password: String): Request =
+        request(url, password).post(ByteArray(0).toRequestBody(null)).build()
+
     private fun modelJson(model: ModelRef): JSONObject = JSONObject().apply {
         put("id", model.id)
         put("providerID", model.providerID)
@@ -419,6 +422,62 @@ class OpenCodeApi {
             request("${root(base)}/api/credential/$id", password)
                 .delete()
                 .build()
+        )
+    }
+
+    suspend fun startOAuth(
+        base: String,
+        password: String,
+        integrationID: String,
+        methodID: String
+    ): OAuthAttempt {
+        val body = JSONObject().put("methodID", methodID)
+        val raw = call(
+            post("${root(base)}/api/integration/$integrationID/connect/oauth", password, body)
+        )
+        return parseOAuthAttempt(JSONObject(raw).getJSONObject("data"))
+    }
+
+    suspend fun oauthStatus(
+        base: String,
+        password: String,
+        integrationID: String,
+        attemptID: String
+    ): OAuthStatus {
+        val raw = call(
+            request(
+                "${root(base)}/api/integration/$integrationID/connect/oauth/$attemptID",
+                password
+            ).get().build()
+        )
+        return parseOAuthStatus(JSONObject(raw).getJSONObject("data"))
+    }
+
+    suspend fun completeOAuth(
+        base: String,
+        password: String,
+        integrationID: String,
+        attemptID: String
+    ) {
+        call(
+            postEmpty(
+                "${root(base)}/api/integration/$integrationID/connect/oauth/$attemptID/complete",
+                password
+            )
+        )
+    }
+
+    suspend fun cancelOAuth(
+        base: String,
+        password: String,
+        integrationID: String,
+        attemptID: String
+    ) {
+        call(
+            request(
+                "${root(base)}/api/integration/$integrationID/connect/oauth/$attemptID",
+                password
+            ).delete().build()
         )
     }
 

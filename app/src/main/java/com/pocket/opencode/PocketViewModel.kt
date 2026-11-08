@@ -81,6 +81,13 @@ class PocketViewModel(application: Application) : AndroidViewModel(application) 
     var providerError by mutableStateOf("")
     var providerStatus by mutableStateOf("")
 
+    var oauthAttempt by mutableStateOf<OAuthAttempt?>(null)
+    var oauthIntegration by mutableStateOf("")
+    var oauthProvider by mutableStateOf("")
+    var oauthState by mutableStateOf("")
+    var oauthError by mutableStateOf("")
+    var oauthBusy by mutableStateOf(false)
+
     var skills by mutableStateOf<List<SkillInfo>>(emptyList())
     var skillBusy by mutableStateOf(false)
     var skillError by mutableStateOf("")
@@ -820,6 +827,103 @@ class PocketViewModel(application: Application) : AndroidViewModel(application) 
                 }
                 .onFailure { providerError = "Не удалось удалить ключ: ${it.message}" }
             providerBusy = false
+        }
+    }
+
+    fun startProviderLogin(provider: IntegrationInfo) {
+        val methodID = provider.oauthMethodID
+        if (methodID == null) {
+            providerError = "У ${provider.name} нет входа через браузер"
+            return
+        }
+        if (status != ConnState.CONNECTED) {
+            providerError = "Сервер ещё не подключён"
+            return
+        }
+        viewModelScope.launch {
+            oauthBusy = true
+            oauthError = ""
+            oauthState = "Готовлю вход…"
+            providerError = ""
+            providerStatus = ""
+            runCatching { api.startOAuth(baseUrl, password, provider.id, methodID) }
+                .onSuccess {
+                    oauthAttempt = it
+                    oauthIntegration = provider.id
+                    oauthProvider = provider.name
+                    oauthState = "Ждём подтверждение в браузере"
+                }
+                .onFailure {
+                    oauthAttempt = null
+                    oauthError = "Не удалось начать вход: ${it.message}"
+                }
+            oauthBusy = false
+        }
+    }
+
+    fun pollProviderLogin() {
+        val attempt = oauthAttempt ?: return
+        if (oauthBusy) return
+        viewModelScope.launch {
+            oauthBusy = true
+            runCatching { api.oauthStatus(baseUrl, password, oauthIntegration, attempt.id) }
+                .onSuccess { result ->
+                    if (oauthAttempt?.id != attempt.id) return@onSuccess
+                    when (result.status) {
+                        "complete" -> {
+                            val saved = runCatching {
+                                api.completeOAuth(
+                                    baseUrl,
+                                    password,
+                                    oauthIntegration,
+                                    attempt.id
+                                )
+                            }
+                            if (saved.isSuccess) {
+                                oauthAttempt = null
+                                oauthState = ""
+                                oauthError = ""
+                                providerStatus = "Вход выполнен: $oauthProvider"
+                                loadProviders()
+                                refreshModels()
+                            } else {
+                                oauthError = "Браузер подтвердил вход, сохраняю: " +
+                                    (saved.exceptionOrNull()?.message ?: "повторяю")
+                            }
+                        }
+
+                        "failed" -> {
+                            oauthError = result.message ?: "Вход не удался"
+                            oauthAttempt = null
+                        }
+
+                        "expired" -> {
+                            oauthError = "Код истёк. Начни вход заново"
+                            oauthAttempt = null
+                        }
+
+                        else -> oauthState = "Ждём подтверждение в браузере"
+                    }
+                }
+                .onFailure {
+                    if (oauthAttempt?.id != attempt.id) return@onFailure
+                    oauthError = "Не удалось проверить вход: ${it.message}. Повторяю…"
+                }
+            oauthBusy = false
+        }
+    }
+
+    fun cancelProviderLogin() {
+        val attempt = oauthAttempt
+        val integration = oauthIntegration
+        oauthAttempt = null
+        oauthState = ""
+        oauthError = ""
+        oauthBusy = false
+        if (attempt != null && integration.isNotBlank()) {
+            viewModelScope.launch {
+                runCatching { api.cancelOAuth(baseUrl, password, integration, attempt.id) }
+            }
         }
     }
 

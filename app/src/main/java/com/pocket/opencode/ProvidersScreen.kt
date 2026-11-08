@@ -1,9 +1,12 @@
 package com.pocket.opencode
 
+import android.content.Intent
+import android.net.Uri
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -35,6 +38,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
@@ -42,9 +46,11 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import kotlinx.coroutines.delay
 
 @Composable
 fun ProvidersScreen(vm: PocketViewModel) {
+    val context = LocalContext.current
     var search by rememberSaveable { mutableStateOf("") }
     var modelSearch by rememberSaveable { mutableStateOf("") }
     var showAll by rememberSaveable { mutableStateOf(false) }
@@ -93,7 +99,7 @@ fun ProvidersScreen(vm: PocketViewModel) {
             val connected = vm.integrations.filter { it.connected }
             if (connected.isEmpty()) {
                 Text(
-                    "Пока только бесплатные модели OpenCode. Добавь свой ключ, чтобы снять лимит.",
+                    "Пока только бесплатные модели OpenCode. Войди в OpenCode Console или добавь свой ключ, чтобы снять лимит.",
                     color = Muted,
                     fontSize = 11.5.sp,
                     lineHeight = 16.sp
@@ -147,14 +153,27 @@ fun ProvidersScreen(vm: PocketViewModel) {
             } else {
                 Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
                     shown.forEach { provider ->
-                        ProviderRow(provider) {
-                            if (provider.supportsKey) {
-                                keyTarget = provider
-                                keyText = ""
-                            } else {
-                                vm.providerStatus = "Для ${provider.name} нужен вход через браузер — позже"
-                            }
+                        val login: (() -> Unit)? = if (provider.supportsOAuth) {
+                            { vm.startProviderLogin(provider) }
+                        } else {
+                            null
                         }
+                        ProviderRow(
+                            provider = provider,
+                            onClick = {
+                                when {
+                                    provider.supportsKey -> {
+                                        keyTarget = provider
+                                        keyText = ""
+                                    }
+
+                                    provider.supportsOAuth -> vm.startProviderLogin(provider)
+                                    else -> vm.providerStatus =
+                                        "Для ${provider.name} нужен вход через браузер — позже"
+                                }
+                            },
+                            onLogin = login
+                        )
                     }
                 }
                 if (search.isBlank() && !showAll && all.size > shown.size) {
@@ -287,10 +306,76 @@ fun ProvidersScreen(vm: PocketViewModel) {
             }
         )
     }
+
+    vm.oauthAttempt?.let { attempt ->
+        LaunchedEffect(attempt.id) {
+            while (vm.oauthAttempt?.id == attempt.id) {
+                delay(2000)
+                vm.pollProviderLogin()
+            }
+        }
+        val code = Regex("[A-Z0-9]{4}-[A-Z0-9]{4}")
+            .find(attempt.instructions)
+            ?.value
+            ?: attempt.instructions
+        AlertDialog(
+            onDismissRequest = { vm.cancelProviderLogin() },
+            containerColor = Card,
+            title = { Text("Вход: ${vm.oauthProvider}", color = TextMain, fontSize = 16.sp) },
+            text = {
+                Column {
+                    Text(
+                        "Открой страницу входа и подтверди код. Ссылка уже содержит его.",
+                        color = Muted,
+                        fontSize = 11.5.sp,
+                        lineHeight = 16.sp
+                    )
+                    Spacer(Modifier.height(8.dp))
+                    Text(
+                        code,
+                        color = Accent,
+                        fontSize = 15.sp,
+                        fontFamily = FontFamily.Monospace
+                    )
+                    Spacer(Modifier.height(10.dp))
+                    Text(vm.oauthState, color = Mint, fontSize = 11.5.sp)
+                    vm.oauthError.takeIf { it.isNotBlank() }?.let {
+                        Spacer(Modifier.height(6.dp))
+                        Text(it, color = Danger, fontSize = 11.5.sp, lineHeight = 16.sp)
+                    }
+                    Spacer(Modifier.height(10.dp))
+                    Text(
+                        "После входа запросы идут от твоего аккаунта OpenCode, а не из общей бесплатной квоты. VPN для этого не нужен.",
+                        color = Dim,
+                        fontSize = 10.5.sp,
+                        lineHeight = 15.sp
+                    )
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    val intent = Intent(Intent.ACTION_VIEW, Uri.parse(attempt.url))
+                    runCatching { context.startActivity(intent) }
+                        .onFailure { vm.oauthError = "Не удалось открыть браузер" }
+                }) {
+                    Text("Открыть браузер", color = Accent)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { vm.cancelProviderLogin() }) {
+                    Text("Отмена", color = Muted)
+                }
+            }
+        )
+    }
 }
 
 @Composable
-private fun ProviderRow(provider: IntegrationInfo, onClick: () -> Unit) {
+private fun ProviderRow(
+    provider: IntegrationInfo,
+    onClick: () -> Unit,
+    onLogin: (() -> Unit)? = null
+) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -312,6 +397,14 @@ private fun ProviderRow(provider: IntegrationInfo, onClick: () -> Unit) {
                 fontSize = 9.5.sp,
                 fontFamily = FontFamily.Monospace
             )
+        }
+        if (onLogin != null && !provider.connected) {
+            TextButton(
+                onClick = onLogin,
+                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp)
+            ) {
+                Text("Войти", color = Accent, fontSize = 10.5.sp)
+            }
         }
         val hint = when {
             provider.connected -> "подключён"
