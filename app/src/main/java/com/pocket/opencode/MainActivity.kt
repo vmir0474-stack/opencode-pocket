@@ -10,16 +10,12 @@ import androidx.activity.SystemBarStyle
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.viewModels
-import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
-import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideInVertically
-import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.slideOutVertically
-import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
@@ -41,14 +37,21 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.PagerDefaults
+import androidx.compose.foundation.pager.PagerSnapDistance
+import androidx.compose.foundation.pager.PagerState
+import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -61,6 +64,9 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.filter
+import kotlinx.coroutines.flow.map
 
 class MainActivity : ComponentActivity() {
     private val vm: PocketViewModel by viewModels()
@@ -138,12 +144,31 @@ fun PocketApp(vm: PocketViewModel) {
             targetValue = if (expanded || imeVisible) 0.dp else navBottom + 84.dp,
             label = "dockSpace"
         )
-        val maxContent = if (vm.tab == 0) 860.dp else 980.dp
+        val pagerState = rememberPagerState(
+            initialPage = vm.tab.coerceIn(0, tabTitles.lastIndex)
+        ) { tabTitles.size }
+        val selectedTab = pagerState.targetPage
+
+        // Свайп обновляет выбранный раздел только после полной остановки
+        // пагинатора: settledPage меняется и во время программной анимации,
+        // из-за чего вкладка могла переключиться на промежуточную.
+        LaunchedEffect(pagerState) {
+            snapshotFlow { pagerState.isScrollInProgress to pagerState.currentPage }
+                .filter { (scrolling, _) -> !scrolling }
+                .map { (_, page) -> page }
+                .distinctUntilChanged()
+                .collect { page -> if (page != vm.tab) vm.selectTab(page) }
+        }
+        // Тап по док-бару/рейлу плавно доводит пагинатор до нужной страницы.
+        LaunchedEffect(vm.tab) {
+            val target = vm.tab.coerceIn(0, tabTitles.lastIndex)
+            if (pagerState.targetPage != target) pagerState.animateScrollToPage(target)
+        }
 
         if (expanded) {
             Row(Modifier.fillMaxSize()) {
                 PocketRail(
-                    selected = vm.tab,
+                    selected = selectedTab,
                     pending = pending,
                     status = vm.status,
                     onSelect = { vm.selectTab(it) },
@@ -160,7 +185,7 @@ fun PocketApp(vm: PocketViewModel) {
                         .navigationBarsPadding()
                 ) {
                     PocketHeader(vm, expanded = true, onDebug = { debugOpen = true })
-                    TabContent(vm, maxContent)
+                    TabContent(vm, pagerState, Modifier.weight(1f))
                 }
             }
         } else {
@@ -173,7 +198,7 @@ fun PocketApp(vm: PocketViewModel) {
                         .padding(bottom = dockSpace)
                         .then(if (vm.tab == 0) Modifier else Modifier.imePadding())
                 ) {
-                    TabContent(vm, maxContent)
+                    TabContent(vm, pagerState)
                 }
             }
 
@@ -190,7 +215,7 @@ fun PocketApp(vm: PocketViewModel) {
                     exit = fadeOut() + slideOutVertically { it / 2 }
                 ) {
                     PocketDock(
-                        selected = vm.tab,
+                        selected = selectedTab,
                         pending = pending,
                         onSelect = { vm.selectTab(it) }
                     )
@@ -206,18 +231,28 @@ fun PocketApp(vm: PocketViewModel) {
 }
 
 @Composable
-private fun TabContent(vm: PocketViewModel, maxContent: androidx.compose.ui.unit.Dp) {
-    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.TopCenter) {
-        Box(Modifier.widthIn(max = maxContent).fillMaxHeight()) {
-            AnimatedContent(
-                targetState = vm.tab,
-                transitionSpec = {
-                    (fadeIn() + slideInHorizontally { it / 14 }) togetherWith
-                        (fadeOut() + slideOutHorizontally { -it / 14 })
-                },
-                label = "tabContent"
-            ) { tab ->
-                when (tab) {
+private fun TabContent(
+    vm: PocketViewModel,
+    pagerState: PagerState,
+    modifier: Modifier = Modifier
+) {
+    HorizontalPager(
+        state = pagerState,
+        modifier = modifier.fillMaxSize(),
+        beyondViewportPageCount = 1,
+        flingBehavior = PagerDefaults.flingBehavior(
+            state = pagerState,
+            pagerSnapDistance = PagerSnapDistance.atMost(1)
+        ),
+        key = { it }
+    ) { page ->
+        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.TopCenter) {
+            Box(
+                Modifier
+                    .widthIn(max = if (page == 0) 860.dp else 980.dp)
+                    .fillMaxHeight()
+            ) {
+                when (page) {
                     0 -> ChatScreen(vm)
                     1 -> ProjectScreen(vm)
                     2 -> ProvidersScreen(vm)

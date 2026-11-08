@@ -1,6 +1,9 @@
 package com.pocket.opencode
 
 import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -33,6 +36,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalHapticFeedback
@@ -94,11 +98,23 @@ private fun DockButton(
 ) {
     val labelColor by animateColorAsState(
         targetValue = if (active) Accent else Muted,
+        animationSpec = tween(200, easing = FastOutSlowInEasing),
         label = "dockLabel"
     )
     val iconColor by animateColorAsState(
         targetValue = if (active) Accent else Muted,
+        animationSpec = tween(200, easing = FastOutSlowInEasing),
         label = "dockIcon"
+    )
+    val pillColor by animateColorAsState(
+        targetValue = if (active) Accent.copy(alpha = 0.15f) else Color.Transparent,
+        animationSpec = tween(200, easing = FastOutSlowInEasing),
+        label = "dockPill"
+    )
+    val iconScale by animateFloatAsState(
+        targetValue = if (active) 1f else 0.92f,
+        animationSpec = tween(200, easing = FastOutSlowInEasing),
+        label = "dockScale"
     )
     Column(
         modifier = modifier
@@ -113,7 +129,7 @@ private fun DockButton(
             modifier = Modifier
                 .size(width = 44.dp, height = 29.dp)
                 .clip(RoundedCornerShape(15.dp))
-                .background(if (active) Accent.copy(alpha = 0.15f) else Color.Transparent),
+                .background(pillColor),
             contentAlignment = Alignment.Center
         ) {
             BadgedBox(
@@ -132,7 +148,12 @@ private fun DockButton(
                     item.icon,
                     contentDescription = item.label,
                     tint = iconColor,
-                    modifier = Modifier.size(21.dp)
+                    modifier = Modifier
+                        .size(21.dp)
+                        .graphicsLayer {
+                            scaleX = iconScale
+                            scaleY = iconScale
+                        }
                 )
             }
         }
@@ -194,7 +215,13 @@ fun PocketRail(
                 val active = selected == index
                 val tint by animateColorAsState(
                     targetValue = if (active) Accent else Muted,
+                    animationSpec = tween(200, easing = FastOutSlowInEasing),
                     label = "railTint"
+                )
+                val activeBg by animateColorAsState(
+                    targetValue = if (active) Accent.copy(alpha = 0.13f) else Color.Transparent,
+                    animationSpec = tween(200, easing = FastOutSlowInEasing),
+                    label = "railBg"
                 )
                 Column(
                     modifier = Modifier
@@ -202,7 +229,7 @@ fun PocketRail(
                         .height(64.dp)
                         .padding(horizontal = 7.dp, vertical = 3.dp)
                         .clip(RoundedCornerShape(16.dp))
-                        .background(if (active) Accent.copy(alpha = 0.13f) else Color.Transparent)
+                        .background(activeBg)
                         .clickable {
                             haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
                             onSelect(index)
