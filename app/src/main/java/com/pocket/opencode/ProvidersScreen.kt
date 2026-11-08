@@ -345,7 +345,7 @@ fun ProvidersScreen(vm: PocketViewModel) {
                     }
                     Spacer(Modifier.height(10.dp))
                     Text(
-                        "После входа запросы идут от твоего аккаунта OpenCode, а не из общей бесплатной квоты. VPN для этого не нужен.",
+                        "После входа запросы идут от твоего аккаунта OpenCode.",
                         color = Dim,
                         fontSize = 10.5.sp,
                         lineHeight = 15.sp

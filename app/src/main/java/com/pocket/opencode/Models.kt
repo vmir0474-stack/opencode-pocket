@@ -200,9 +200,9 @@ data class UiMessage(
 )
 
 /**
- * Free OpenCode models share a daily quota that resets at 00:00 UTC. The quota is not tied to
- * the client IP, so switching VPN or network does not clear it. Show that plainly instead of the
- * raw English gateway error.
+ * Free OpenCode models share a daily quota that resets at 00:00 UTC. When it runs out, point the
+ * user to signing in to OpenCode Console or to their own provider key instead of showing the raw
+ * English gateway error.
  */
 internal fun freeLimitText(now: Long = System.currentTimeMillis()): String {
     val reset = (now / 86_400_000L + 1L) * 86_400_000L
@@ -215,9 +215,8 @@ internal fun freeLimitText(now: Long = System.currentTimeMillis()): String {
     }
     return buildString {
         appendLine("Бесплатный лимит OpenCode исчерпан.")
-        appendLine("Он не привязан к IP — VPN и смена адреса его не сбрасывают.")
         appendLine("Сброс в 00:00 UTC, через $left.")
-        append("Чтобы продолжить сейчас: вкладка «Модели» → «Войти» в OpenCode Console или ключ другого провайдера.")
+        append("Чтобы продолжить: вкладка «Модели» → «Войти» в OpenCode Console или ключ своего провайдера.")
     }
 }
 
