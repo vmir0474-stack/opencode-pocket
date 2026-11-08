@@ -12,8 +12,8 @@ android {
         applicationId = "com.pocket.opencode"
         minSdk = 26
         targetSdk = 35
-        versionCode = 9
-        versionName = "0.6.2"
+        versionCode = 10
+        versionName = "0.6.3"
 
         // Helio G85 / TECNO LE7n и остальные целевые телефоны — arm64.
         // Остальные ABI не нужны: встроенные rg/pocket-rs собраны только

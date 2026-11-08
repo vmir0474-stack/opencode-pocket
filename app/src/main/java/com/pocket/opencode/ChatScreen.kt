@@ -36,16 +36,17 @@ import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AddPhotoAlternate
-import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
-import androidx.compose.material.icons.filled.Send
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material.icons.outlined.Add
 import androidx.compose.material.icons.outlined.AutoAwesome
 import androidx.compose.material.icons.outlined.ContentCopy
 import androidx.compose.material.icons.outlined.Search
+import androidx.compose.material.icons.rounded.AddPhotoAlternate
+import androidx.compose.material.icons.rounded.ArrowUpward
+import androidx.compose.material.icons.rounded.Stop
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Button
 import androidx.compose.material3.HorizontalDivider
@@ -486,7 +487,7 @@ private fun Composer(vm: PocketViewModel) {
                     modifier = Modifier
                         .fillMaxWidth()
                         .padding(start = 7.dp, end = 7.dp, top = 4.dp, bottom = 4.dp),
-                    verticalAlignment = Alignment.Bottom
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
                     AttachButton(
                         enabled = connected && !vm.attachmentBusy && vm.attachments.size < 6
@@ -738,19 +739,29 @@ private fun AttachmentThumb(attachment: Attachment, onRemove: () -> Unit) {
 
 @Composable
 private fun AttachButton(enabled: Boolean, onClick: () -> Unit) {
+    val shape = RoundedCornerShape(14.dp)
     Box(
         modifier = Modifier
             .size(40.dp)
-            .clip(CircleShape)
-            .background(if (enabled) Card else Color.Transparent)
-            .border(1.dp, if (enabled) Line else Color.Transparent, CircleShape)
+            .clip(shape)
+            .background(
+                Brush.verticalGradient(
+                    if (enabled) listOf(Card2, Card)
+                    else listOf(Card.copy(alpha = 0.45f), Card.copy(alpha = 0.45f))
+                )
+            )
+            .border(
+                1.dp,
+                if (enabled) Line.copy(alpha = 0.9f) else Line.copy(alpha = 0.3f),
+                shape
+            )
             .clickable(enabled = enabled, onClick = onClick),
         contentAlignment = Alignment.Center
     ) {
         Icon(
-            Icons.Default.AddPhotoAlternate,
+            Icons.Rounded.AddPhotoAlternate,
             contentDescription = "Прикрепить изображение",
-            tint = if (enabled) Accent else Dim,
+            tint = if (enabled) Accent.copy(alpha = 0.92f) else Dim.copy(alpha = 0.55f),
             modifier = Modifier.size(19.dp)
         )
     }
@@ -769,40 +780,49 @@ private fun rememberBitmap(uri: String, maxSide: Int = 1200): Bitmap? {
 
 @Composable
 private fun SendButton(enabled: Boolean, onClick: () -> Unit) {
+    val shape = RoundedCornerShape(14.dp)
     Box(
         modifier = Modifier
             .size(40.dp)
-            .clip(CircleShape)
+            .clip(shape)
             .background(
-                Brush.linearGradient(
-                    if (enabled) listOf(Accent, Accent2) else listOf(Card2, Card2)
-                )
+                if (enabled) {
+                    Brush.linearGradient(listOf(Accent, Accent2))
+                } else {
+                    Brush.linearGradient(listOf(Card2, Card2))
+                }
+            )
+            .border(
+                1.dp,
+                if (enabled) Color.White.copy(alpha = 0.16f) else Color.Transparent,
+                shape
             )
             .clickable(enabled = enabled, onClick = onClick),
         contentAlignment = Alignment.Center
     ) {
         Icon(
-            Icons.Default.Send,
+            Icons.Rounded.ArrowUpward,
             contentDescription = "Отправить",
-            tint = if (enabled) Bg else Dim,
-            modifier = Modifier.size(18.dp)
+            tint = if (enabled) Bg else Dim.copy(alpha = 0.7f),
+            modifier = Modifier.size(20.dp)
         )
     }
 }
 
 @Composable
 private fun StopButton(onClick: () -> Unit) {
+    val shape = RoundedCornerShape(14.dp)
     Box(
         modifier = Modifier
             .size(40.dp)
-            .clip(CircleShape)
+            .clip(shape)
             .background(Danger.copy(alpha = 0.16f))
-            .border(1.dp, Danger.copy(alpha = 0.35f), CircleShape)
+            .border(1.dp, Danger.copy(alpha = 0.35f), shape)
             .clickable(onClick = onClick),
         contentAlignment = Alignment.Center
     ) {
         Icon(
-            Icons.Default.Clear,
+            Icons.Rounded.Stop,
             contentDescription = "Остановить",
             tint = Danger,
             modifier = Modifier.size(18.dp)
