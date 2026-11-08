@@ -321,7 +321,8 @@ private fun Transcript(vm: PocketViewModel) {
             itemsIndexed(reversed, key = { index, message -> "${message.id}#$index" }) { _, message ->
                 MessageItem(
                     message = message,
-                    live = vm.running && message.id == liveAssistantId
+                    live = vm.running && message.id == liveAssistantId,
+                    onOpenModels = { vm.selectTab(2) }
                 )
             }
         }
@@ -831,10 +832,10 @@ private fun StopButton(onClick: () -> Unit) {
 }
 
 @Composable
-private fun MessageItem(message: UiMessage, live: Boolean) {
+private fun MessageItem(message: UiMessage, live: Boolean, onOpenModels: () -> Unit = {}) {
     when (message.role) {
         UiRole.USER -> UserBubble(message)
-        UiRole.ASSISTANT -> AssistantMessage(message, live)
+        UiRole.ASSISTANT -> AssistantMessage(message, live, onOpenModels)
         UiRole.SHELL -> ShellMessage(message)
         UiRole.SYSTEM -> SystemMessage(message)
     }
@@ -901,7 +902,7 @@ private fun UserBubble(message: UiMessage) {
 }
 
 @Composable
-private fun AssistantMessage(message: UiMessage, live: Boolean) {
+private fun AssistantMessage(message: UiMessage, live: Boolean, onOpenModels: () -> Unit) {
     val clipboard = LocalClipboardManager.current
     val plain = remember(message.blocks) {
         message.blocks.filterIsInstance<UiBlock.Text>().joinToString("\n\n") { it.content }
@@ -979,18 +980,29 @@ private fun AssistantMessage(message: UiMessage, live: Boolean) {
             if (index != blocks.lastIndex) Spacer(Modifier.height(10.dp))
         }
         message.error?.takeIf { it.isNotBlank() }?.let { error ->
+            val freeLimit = message.errorType == "provider.free-limit"
             Spacer(Modifier.height(8.dp))
             Surface(
                 color = Danger.copy(alpha = 0.10f),
                 shape = RoundedCornerShape(12.dp),
                 border = BorderStroke(1.dp, Danger.copy(alpha = 0.35f))
             ) {
-                Text(
-                    error,
-                    color = Danger,
-                    fontSize = 12.sp,
-                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 9.dp)
-                )
+                Column(Modifier.padding(horizontal = 12.dp, vertical = 9.dp)) {
+                    Text(
+                        if (freeLimit) freeLimitText() else error,
+                        color = Danger,
+                        fontSize = 12.sp,
+                        lineHeight = 17.sp
+                    )
+                    if (freeLimit) {
+                        TextButton(
+                            onClick = onOpenModels,
+                            contentPadding = PaddingValues(horizontal = 0.dp, vertical = 0.dp)
+                        ) {
+                            Text("Открыть модели", color = Accent, fontSize = 11.5.sp)
+                        }
+                    }
+                }
             }
         }
     }

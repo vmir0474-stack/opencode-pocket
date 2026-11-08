@@ -195,8 +195,31 @@ data class UiMessage(
     val model: String? = null,
     val createdAt: Long = System.currentTimeMillis(),
     val outcome: String? = null,
-    val error: String? = null
+    val error: String? = null,
+    val errorType: String? = null
 )
+
+/**
+ * Free OpenCode models share a daily quota that resets at 00:00 UTC. The quota is not tied to
+ * the client IP, so switching VPN or network does not clear it. Show that plainly instead of the
+ * raw English gateway error.
+ */
+internal fun freeLimitText(now: Long = System.currentTimeMillis()): String {
+    val reset = (now / 86_400_000L + 1L) * 86_400_000L
+    val minutes = ((reset - now) / 60_000L).coerceAtLeast(0L)
+    val hours = minutes / 60
+    val rest = minutes % 60
+    val left = buildString {
+        if (hours > 0) append("$hours ч ")
+        append("$rest мин")
+    }
+    return buildString {
+        appendLine("Бесплатный лимит OpenCode исчерпан.")
+        appendLine("Он не привязан к IP — VPN и смена адреса его не сбрасывают.")
+        appendLine("Сброс в 00:00 UTC, через $left.")
+        append("Чтобы продолжить сейчас: вкладка «Модели» → добавь ключ провайдера или подписку OpenCode Go.")
+    }
+}
 
 internal fun jsonText(value: Any?): String = when (value) {
     null, JSONObject.NULL -> ""
@@ -481,7 +504,8 @@ fun parseServerMessages(data: JSONArray): List<UiMessage> {
                     }
                 }
                 val model = raw.optJSONObject("model")
-                val error = raw.optJSONObject("error")?.optString("message")
+                val errorObject = raw.optJSONObject("error")
+                val error = errorObject?.optString("message")
                 out += UiMessage(
                     id = id,
                     role = UiRole.ASSISTANT,
@@ -489,7 +513,8 @@ fun parseServerMessages(data: JSONArray): List<UiMessage> {
                     agent = raw.optText("agent"),
                     model = model?.optText("id"),
                     createdAt = time,
-                    error = error
+                    error = error,
+                    errorType = errorObject?.optText("type")
                 )
             }
 
@@ -552,6 +577,7 @@ fun UiMessage.toCacheJson(): JSONObject {
     model?.let { o.put("model", it) }
     outcome?.let { o.put("outcome", it) }
     error?.let { o.put("error", it) }
+    errorType?.let { o.put("errorType", it) }
     val arr = JSONArray()
     for (block in blocks) {
         val b = JSONObject()
@@ -656,7 +682,8 @@ fun cacheFromJson(raw: String): List<UiMessage> {
             model = o.optText("model"),
             createdAt = o.optLong("created"),
             outcome = o.optText("outcome"),
-            error = o.optText("error")
+            error = o.optText("error"),
+            errorType = o.optText("errorType")
         )
     }
     return messages
