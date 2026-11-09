@@ -152,6 +152,13 @@ object EmbeddedServer {
             Toolchain.Status(Toolchain.toolsDir(paths), error = it.message ?: it.toString())
         }
         markStart(t0, "tools")
+        if (BuildConfig.POCKET_DEV) {
+            // Обёртка `dev` должна лежать в PATH до запуска сервера, иначе
+            // агент не увидит Linux-окружение.
+            val devReady = runCatching { DevEnvironment.ensureTools(context, paths) }
+                .getOrDefault(false)
+            DebugLog.event("dev", if (devReady) "tools ready" else "tools unavailable")
+        }
         DebugLog.event(
             "toolchain",
             if (tools.ok) "rg ready" else "rg unavailable",

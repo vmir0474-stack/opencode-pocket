@@ -21,7 +21,29 @@ android {
         ndk { abiFilters += "arm64-v8a" }
     }
 
-    buildFeatures { compose = true }
+    // Pocket Dev — отдельная сборка с proot и Linux-окружением. Ей нужен
+    // targetSdk 28: начиная с 29 Android запрещает исполнять ELF из
+    // app-data, а proot и rootfs работают именно оттуда. Обычная сборка
+    // остаётся на targetSdk 35.
+    flavorDimensions += "edition"
+    productFlavors {
+        create("standard") {
+            dimension = "edition"
+            buildConfigField("boolean", "POCKET_DEV", "false")
+        }
+        create("dev") {
+            dimension = "edition"
+            applicationId = "com.pocket.opencode.dev"
+            targetSdk = 28
+            versionNameSuffix = "-dev"
+            buildConfigField("boolean", "POCKET_DEV", "true")
+        }
+    }
+
+    buildFeatures {
+        compose = true
+        buildConfig = true
+    }
 
     buildTypes {
         release {
@@ -73,6 +95,7 @@ dependencies {
     implementation("androidx.compose.material:material-icons-extended")
     implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.8.7")
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
+    implementation("org.apache.commons:commons-compress:1.27.1")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.9.0")
     testImplementation("junit:junit:4.13.2")
     testImplementation("org.json:json:20240303")

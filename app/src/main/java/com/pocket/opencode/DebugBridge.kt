@@ -27,7 +27,7 @@ object DebugBridge {
 
     private val actions = setOf(
         "restart", "start", "stop", "reload", "skills", "mcp", "config", "prompt", "api",
-        "apps", "launch",
+        "apps", "launch", "dev-status", "dev-install", "dev-test", "diagnostics",
     )
     private val pool = Executors.newCachedThreadPool { runnable ->
         Thread(runnable, "debug-bridge-client").apply { isDaemon = true }

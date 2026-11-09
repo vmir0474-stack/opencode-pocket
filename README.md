@@ -8,6 +8,8 @@ Android-клиент со **встроенным настоящим сервер
 
 - Пакет: `com.pocket.opencode`
 - Версия: `0.6.11` (`versionCode 18`)
+- Pocket Dev: отдельный APK `com.pocket.opencode.dev`, `targetSdk 28`
+  (см. раздел «Pocket Dev»)
 - Минимальная Android: 8.0 (API 26), target 35
 - ABI: только `arm64-v8a`
 - Сервер: `2.1.4-beta.4b83402a`
@@ -135,6 +137,38 @@ HTTP/SSE-адрес. Сервер можно подключить, отключ�
 поэтому после перезапуска сервер поднимается сам. Локальные stdio-серверы
 пока не поддерживаются — внутри APK нет `node`/`python`.
 
+## Pocket Dev
+
+Обычная сборка (`com.pocket.opencode`, `target 35`) не может запускать ELF из
+своих файлов: начиная с Android 10 приложениям с `target 29+` это запрещено.
+Поэтому Pocket Dev — **отдельный APK** `com.pocket.opencode.dev` с
+`targetSdk 28`: только так Android разрешает запускать `proot` и
+Linux-бинарники из приватной папки приложения. Он ставится рядом с обычной
+сборкой, данные не пересекаются.
+
+Что внутри:
+
+- `proot` 5.x, `libtalloc`, `libandroid-shmem` и ELF-загрузчик proot
+  (`loader`/`loader32`) уже в APK.
+- Ubuntu 24.04.5 base arm64 скачивается при первом запуске (около 30 МБ,
+  проверка SHA-256) и ставится в `files/dev/rootfs`.
+- Команда `dev` появляется в `PATH` сервера: `dev apt-get update`,
+  `dev python3 …`, `dev /bin/bash`.
+- Root и Termux не нужны.
+
+Установка: **Settings → Pocket Dev → «Установить Ubuntu»**. После установки
+кнопка «Проверить proot» запускает `/bin/echo` внутри rootfs. Свободного
+места нужно около 0.5 ГБ (архив + распаковка + запас).
+
+Ограничения Pocket Dev:
+
+- Это отдельный APK; в обычной сборке команды `dev` нет.
+- `proot` — эмуляция системных вызовов, а не виртуализация: скорость ниже
+  нативной, `ptrace`-отладка внутри гостя ограничена.
+- На устройствах с 16 КБ страницами памяти proot ещё не проверен;
+  «Диагностика» показывает размер страницы и статус proot/загрузчика.
+- Удаление приложения удаляет rootfs; обновление APK — нет.
+
 ## Перенос из Termux
 
 В Termux:
@@ -164,6 +198,9 @@ tar czf /sdcard/OpenCode/import/opencode-backup.tar.gz -C $HOME \
 | Журнал отладки | `files/opencode/debug/events.ndjson` |
 | Токен отладочного моста | `files/opencode/debug/token` |
 | Встроенный `rg` | `files/opencode/tools/rg` |
+| Pocket Dev: proot + загрузчик | `files/dev/bin` |
+| Pocket Dev: Ubuntu rootfs | `files/dev/rootfs` |
+| Pocket Dev: обёртка `dev` | `files/opencode/tools/dev` |
 | Зеркало журнала | `/sdcard/OpenCode/.debug/events.ndjson` |
 | Рабочий каталог | `/sdcard/OpenCode` (или `files/opencode/workspace`) |
 | Резервные копии | `files/opencode/backup-*` |
@@ -209,12 +246,14 @@ curl -X POST -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/jso
 # или удалённо, если настроен POCKET_HOST/POCKET_PASS
 bash scripts/remote.sh sync
 bash scripts/remote.sh test '*'
-bash scripts/remote.sh build          # debug, для отладки
+bash scripts/remote.sh build          # debug, обычная сборка
+bash scripts/remote.sh dev            # debug, Pocket Dev
 # release: assembleRelease на сборочной машине
 ```
 
-Release APK: `app/build/outputs/apk/release/app-release.apk`, около 69 МБ.
-Debug APK: `app/build/outputs/apk/debug/app-debug.apk`, около 91 МБ.
+Release APK: `app/build/outputs/apk/standard/release/app-standard-release.apk`,
+около 69 МБ. Debug APK: `app/build/outputs/apk/standard/debug/app-standard-debug.apk`,
+около 91 МБ. Pocket Dev (debug): `app/build/outputs/apk/dev/debug/app-dev-debug.apk`.
 Внутри — бинарник сервера `lib/arm64-v8a/libocserver.so`, `librg.so`,
 `libpcre2-8.so` и 42 каталога скилов. Release подписан тем же ключом, что
 и прежние сборки, поэтому ставится поверх без удаления данных; `run-as`
@@ -238,5 +277,7 @@ Debug APK: `app/build/outputs/apk/debug/app-debug.apk`, около 91 МБ.
   может упереться в лимит провайдера (402/429). Подключи ключ Exa или Tavily
   в «Модели» либо используй `webfetch`.
 - Сервер слушает только `127.0.0.1`; не выставляй его в интернет.
+- Pocket Dev ставится отдельным APK (`com.pocket.opencode.dev`) и требует
+  `targetSdk 28`; на 16 КБ страницах памяти он ещё не проверен.
 - Для работы сверх бесплатного дневного объёма нужен вход в OpenCode
   Console или ключ своего провайдера.

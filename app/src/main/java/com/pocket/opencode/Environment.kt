@@ -67,6 +67,8 @@ object Environment {
         // Инструменты разработки: на rootless-телефоне их обычно нет.
         "git", "node", "npm", "npx", "python", "python3", "pip", "pip3",
         "jq", "bash", "make", "gcc", "clang", "cc", "sqlite3", "openssl",
+        // Обёртка Pocket Dev: появляется в PATH только в сборке dev.
+        "dev",
     )
 
     /** su может быть установлен, но приложение всё равно работает от uid. */
@@ -184,8 +186,11 @@ object Environment {
                 "- Батарея: оптимизация включена, в фоне Android может ограничивать сеть."
             }
         )
+        val pocketDev = BuildConfig.POCKET_DEV && "dev" in report.availableNames
         if (report.rootBinary) {
             appendLine("- Бинарник `su` в системе есть, но сервер запущен от обычного uid приложения, не от root.")
+        } else if (pocketDev) {
+            appendLine("- `su` не найден. Root не нужен: пакеты и языки ставятся внутри `dev` (Ubuntu через proot).")
         } else {
             appendLine("- `su` не найден. Root, Debian chroot, apt и systemd недоступны; они и не нужны для работы приложения.")
         }
@@ -198,8 +203,17 @@ object Environment {
                 "- Доступно: ${report.availableNames.joinToString(", ")}."
             }
         )
-        if (report.missing.isNotEmpty()) {
-            appendLine("- Недоступно: ${report.missing.joinToString(", ")}.")
+        val missing = report.missing.filter { it != "dev" || BuildConfig.POCKET_DEV }
+        if (missing.isNotEmpty()) {
+            appendLine("- Недоступно: ${missing.joinToString(", ")}.")
+        }
+        if (pocketDev) {
+            appendLine()
+            appendLine("## Pocket Dev (Ubuntu)")
+            appendLine("- `dev КОМАНДА` запускает команду в Ubuntu 24.04 через proot: `dev git --version`, `dev python3 script.py`, `dev /bin/bash -lc '…'`.")
+            appendLine("- Внутри Ubuntu есть apt: `dev apt-get update && dev apt-get install -y ПАКЕТ`. Пакеты ставятся в приватный rootfs приложения, root не нужен.")
+            appendLine("- `dev` без аргументов открывает bash. `/workspace` — общий рабочий каталог; `/sdcard` проброшен, если выдан доступ ко всем файлам.")
+            appendLine("- `git`, `node`, `python` и другие языки вызывай только через `dev`; вне него их по-прежнему нет в PATH.")
         }
         val builtins = listOf("rg", "pocket-rs").filter { it in report.availableNames }
         appendLine(
@@ -214,7 +228,9 @@ object Environment {
         appendLine("- `zip` → `tar -czf архив.tar.gz каталог` или `tar -cf архив.tar файлы`.")
         appendLine("- `wget` → `curl -L -o файл URL`.")
         appendLine("- `jq`, `sqlite3`, `openssl` замены нет: не вызывай их, разбирай текст через `sed`/`awk`.")
-        appendLine("- `git` замены нет: работай с файлами напрямую.")
+        if (!pocketDev) {
+            appendLine("- `git` замены нет: работай с файлами напрямую.")
+        }
         appendLine()
         appendLine("## Управление телефоном")
         appendLine("- Приложение работает от обычного uid, без root и без shell-прав. `am`, `input`, `monkey`, `wm`, `screencap`, `settings`, `content`, `dumpsys` недоступны — не трать на них попытки.")
@@ -231,9 +247,13 @@ object Environment {
         appendLine()
         appendLine("## Как работать")
         appendLine("- В списке «Доступно» — всё, что реально нашлось в PATH. Shell-встроенные команды (`cd`, `export`, `if`, `for`, `echo`, `printf`, `test`) доступны всегда.")
-        appendLine("- Если команды нет в списке — не вызывай её и не пытайся устанавливать пакеты.")
+        if (pocketDev) {
+            appendLine("- Пакеты и языки, которых нет в PATH сервера, доступны через `dev`: `dev apt-get install -y ПАКЕТ`, затем `dev КОМАНДА`.")
+        } else {
+            appendLine("- Если команды нет в списке — не вызывай её и не пытайся устанавливать пакеты.")
+        }
         appendLine("- Внешние окружения (Termux, Debian) используй только если пользователь сам о них сказал; сервер их не подключает.")
-        if ("git" !in report.availableNames) {
+        if ("git" !in report.availableNames && !pocketDev) {
             if (report.rootBinary) {
                 appendLine("- `git` нет в PATH сервера. Если пользователь явно настроил Termux/Debian, бери git оттуда; сам ничего не устанавливай.")
             } else {
@@ -241,7 +261,7 @@ object Environment {
             }
         }
         val scriptMissing = listOf("node", "python", "python3").none { it in report.availableNames }
-        if (scriptMissing) {
+        if (scriptMissing && !pocketDev) {
             if (report.rootBinary) {
                 appendLine("- `node`/`npm`/`python` нет в PATH сервера. Локальные stdio MCP запустятся только из внешнего окружения, если пользователь его настроил; иначе используй remote MCP.")
             } else {

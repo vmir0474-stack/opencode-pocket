@@ -393,6 +393,55 @@ class PocketViewModel(application: Application) : AndroidViewModel(application) 
                 }
             }
 
+            "dev-status" -> {
+                runBlocking { DevEnvironment.refresh(app) }
+                val state = DevEnvironment.state.value
+                JSONObject()
+                    .put("ok", true)
+                    .put("dev", BuildConfig.POCKET_DEV)
+                    .put("toolsReady", state.toolsReady)
+                    .put("installed", state.installed)
+                    .put("busy", state.busy)
+                    .put("phase", state.phase)
+                    .put("progress", state.progress)
+                    .put("version", state.version)
+                    .put("rootfs", state.rootfs)
+                    .put("freeBytes", state.freeBytes)
+                    .put("error", state.error)
+            }
+
+            "dev-install" -> {
+                if (!BuildConfig.POCKET_DEV) {
+                    JSONObject().put("error", "это обычная сборка, а не Pocket Dev")
+                } else {
+                    viewModelScope.launch { DevEnvironment.install(app) }
+                    JSONObject().put("ok", true).put("action", name)
+                }
+            }
+
+            "dev-test" -> {
+                if (!BuildConfig.POCKET_DEV) {
+                    JSONObject().put("error", "это обычная сборка, а не Pocket Dev")
+                } else {
+                    val output = runBlocking { DevEnvironment.test(app) }
+                    JSONObject().put("ok", true).put("output", output)
+                }
+            }
+
+            "diagnostics" -> {
+                val info = DeviceDiagnostics.collect(app)
+                JSONObject()
+                    .put("ok", true)
+                    .put("android", info.android)
+                    .put("sdk", info.sdk)
+                    .put("abi", info.abi)
+                    .put("pageSize", info.pageSize)
+                    .put("model", info.model)
+                    .put("freeBytes", info.freeBytes)
+                    .put("rootfs", info.rootfs)
+                    .put("proot", info.proot)
+            }
+
             else -> JSONObject().put("error", "unknown action: $name")
         }
     }
