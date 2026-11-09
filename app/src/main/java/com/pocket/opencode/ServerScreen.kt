@@ -376,14 +376,14 @@ fun QuotaPanel(vm: PocketViewModel) {
     }
 }
 
-private fun serverStatusLabel(vm: PocketViewModel): String = when (vm.serverStatus.state) {
+internal fun serverStatusLabel(vm: PocketViewModel): String = when (vm.serverStatus.state) {
     EmbeddedState.RUNNING -> if (vm.status == ConnState.CONNECTED) "Работает" else "Запущен"
     EmbeddedState.STARTING -> "Запуск"
     EmbeddedState.ERROR -> "Ошибка"
     EmbeddedState.STOPPED -> "Остановлен"
 }
 
-private fun serverStatusTone(vm: PocketViewModel) = when (vm.serverStatus.state) {
+internal fun serverStatusTone(vm: PocketViewModel) = when (vm.serverStatus.state) {
     EmbeddedState.RUNNING -> if (vm.status == ConnState.CONNECTED) Mint else Warn
     EmbeddedState.STARTING -> Warn
     EmbeddedState.ERROR -> Danger

@@ -17,8 +17,8 @@ android {
         // запускается. Android 14 принимает targetSdk >= 23, Android 15 —
         // >= 24, так что 28 устанавливается и на них.
         targetSdk = 28
-        versionCode = 20
-        versionName = "0.8.0"
+        versionCode = 21
+        versionName = "0.8.1"
 
         // Helio G85 / TECNO LE7n и остальные целевые телефоны — arm64.
         // Остальные ABI не нужны: встроенные rg/pocket-rs собраны только

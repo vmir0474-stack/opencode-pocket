@@ -172,13 +172,13 @@ class MainActivity : ComponentActivity() {
     }
 }
 
-private val tabTitles = listOf("Чат", "Проект", "Модели", "Скилы", "Связь")
+private val tabTitles = listOf("Чат", "Проект", "Модели", "Скилы", "Настройки")
 private val tabSubtitles = listOf(
     "OpenCode Server API v2",
     "Файлы, git и просмотр diff",
     "Провайдеры, ключи и модели",
     "Локальная библиотека навыков",
-    "Подключение и встроенный сервер"
+    "Сервер, файлы, окружение и обновления"
 )
 
 @Composable

@@ -24,7 +24,7 @@ import androidx.compose.material.icons.outlined.AutoAwesome
 import androidx.compose.material.icons.outlined.Bolt
 import androidx.compose.material.icons.outlined.ChatBubbleOutline
 import androidx.compose.material.icons.outlined.FolderOpen
-import androidx.compose.material.icons.outlined.SettingsInputAntenna
+import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material3.Badge
 import androidx.compose.material3.BadgedBox
 import androidx.compose.material3.Icon
@@ -52,7 +52,7 @@ private val dockItems = listOf(
     DockItem("Проект", Icons.Outlined.FolderOpen),
     DockItem("Модели", Icons.Outlined.AutoAwesome),
     DockItem("Скилы", Icons.Outlined.Bolt),
-    DockItem("Связь", Icons.Outlined.SettingsInputAntenna),
+    DockItem("Настройки", Icons.Outlined.Settings),
 )
 
 @Composable

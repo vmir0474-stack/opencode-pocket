@@ -1,5 +1,9 @@
 package com.pocket.opencode
 
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -27,12 +31,14 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
@@ -43,339 +49,89 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import java.util.Locale
 
+/** Подразделы настроек: вместо одной длинной ленты карточек. */
+private enum class SettingsSection(val title: String, val subtitle: String) {
+    SERVER("Сервер", "Режим, состояние и конфиг OpenCode"),
+    FILES("Файлы", "Хранилище, рабочий каталог и импорт"),
+    ENVIRONMENT("Окружение", "Команды агента и Pocket Dev"),
+    MCP("MCP", "Внешние MCP-серверы"),
+    APP("Приложение", "Обновления, сессия и данные"),
+}
+
 @Composable
 fun SettingsScreen(vm: PocketViewModel) {
     var revealPassword by rememberSaveable { mutableStateOf(false) }
     var confirmReset by remember { mutableStateOf(false) }
-    var showConfig by rememberSaveable { mutableStateOf(false) }
+    var sectionIndex by rememberSaveable { mutableIntStateOf(0) }
+    val sections = SettingsSection.entries
+    val section = sections[sectionIndex.coerceIn(0, sections.lastIndex)]
+    val scroll = rememberScrollState()
 
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .verticalScroll(rememberScrollState())
-            .padding(horizontal = 16.dp, vertical = 10.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp)
-    ) {
-        ScreenHeader(
-            title = "Связь",
-            subtitle = "OpenCode Server API v2 · встроенный и внешний режим"
-        )
+    LaunchedEffect(section) { scroll.scrollTo(0) }
 
-        ServerPanel(vm)
-        WorkspacePanel(vm)
-        EnvironmentPanel(vm)
-        DevPanel()
-        QuotaPanel(vm)
-        MigrationPanel(vm)
-        McpPanel(vm)
-
-        Panel {
-            SectionTitle("Конфиг OpenCode") {
-                TextButton(
-                    onClick = {
-                        showConfig = !showConfig
-                        if (showConfig) vm.loadConfig()
-                    },
-                    contentPadding = androidx.compose.foundation.layout.PaddingValues(
-                        horizontal = 8.dp,
-                        vertical = 0.dp
-                    )
-                ) {
-                    Text(if (showConfig) "Скрыть" else "Открыть", color = Accent, fontSize = 11.sp)
-                }
-            }
-            if (showConfig) {
-                Spacer(Modifier.height(8.dp))
-                Text(
-                    vm.configFilePath().absolutePath,
-                    color = Dim,
-                    fontSize = 9.5.sp,
-                    fontFamily = FontFamily.Monospace,
-                    lineHeight = 14.sp
-                )
-                Spacer(Modifier.height(8.dp))
-                OutlinedTextField(
-                    value = vm.configText,
-                    onValueChange = {
-                        vm.configText = it
-                        vm.configError = ""
-                    },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(220.dp),
-                    label = { Text("opencode.json", color = Muted, fontSize = 11.sp) },
-                    shape = RoundedCornerShape(13.dp),
-                    textStyle = androidx.compose.ui.text.TextStyle(
-                        fontFamily = FontFamily.Monospace,
-                        fontSize = 11.sp
-                    ),
-                    colors = fieldColors()
-                )
-                if (vm.configError.isNotBlank()) {
-                    Spacer(Modifier.height(6.dp))
-                    Text(vm.configError, color = Danger, fontSize = 11.sp, lineHeight = 16.sp)
-                }
-                Spacer(Modifier.height(10.dp))
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Button(
-                        onClick = { vm.saveConfig(vm.configText) },
-                        shape = RoundedCornerShape(13.dp),
-                        modifier = Modifier.weight(1f)
-                    ) {
-                        Text("Сохранить", fontSize = 11.5.sp)
-                    }
-                    OutlinedButton(
-                        onClick = { vm.loadConfig() },
-                        shape = RoundedCornerShape(13.dp)
-                    ) {
-                        Text("Сбросить", fontSize = 11.5.sp)
-                    }
-                }
-                Spacer(Modifier.height(8.dp))
-                OutlinedButton(
-                    onClick = { vm.restartEmbedded() },
-                    shape = RoundedCornerShape(13.dp),
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Text("Перезагрузить сервер", fontSize = 11.5.sp)
-                }
-            }
-        }
-
-        if (!vm.isEmbedded) {
-            Panel {
-                SectionTitle("Подключение")
-                Spacer(Modifier.height(10.dp))
-            OutlinedTextField(
-                value = vm.baseUrl,
-                onValueChange = vm::onBaseUrlChange,
-                modifier = Modifier.fillMaxWidth(),
-                label = { Text("Адрес сервера", color = Muted, fontSize = 11.sp) },
-                placeholder = { Text("http://127.0.0.1:4096", color = Dim, fontSize = 13.sp) },
-                singleLine = true,
-                shape = RoundedCornerShape(13.dp),
-                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri),
-                colors = fieldColors()
-            )
+    Column(Modifier.fillMaxSize()) {
+        Column(
+            Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp)
+                .padding(top = 10.dp)
+        ) {
+            ScreenHeader(title = "Настройки", subtitle = section.subtitle)
             Spacer(Modifier.height(9.dp))
-            OutlinedTextField(
-                value = vm.password,
-                onValueChange = vm::onPasswordChange,
-                modifier = Modifier.fillMaxWidth(),
-                label = { Text("Пароль сервера", color = Muted, fontSize = 11.sp) },
-                placeholder = { Text("если задан", color = Dim, fontSize = 13.sp) },
-                singleLine = true,
-                shape = RoundedCornerShape(13.dp),
-                visualTransformation = if (revealPassword) {
-                    VisualTransformation.None
-                } else {
-                    PasswordVisualTransformation()
-                },
-                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
-                trailingIcon = {
-                    TextButton(
-                        onClick = { revealPassword = !revealPassword },
-                        contentPadding = androidx.compose.foundation.layout.PaddingValues(
-                            horizontal = 10.dp,
-                            vertical = 0.dp
-                        )
-                    ) {
-                        Text(
-                            if (revealPassword) "скрыть" else "показать",
-                            color = Muted,
-                            fontSize = 10.5.sp
+            SettingsSummary(vm)
+            Spacer(Modifier.height(10.dp))
+            SettingsTabs(section) { sectionIndex = it.ordinal }
+        }
+
+        Column(
+            modifier = Modifier
+                .weight(1f)
+                .fillMaxWidth()
+                .verticalScroll(scroll)
+                .padding(horizontal = 16.dp, vertical = 10.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            when (section) {
+                SettingsSection.SERVER -> {
+                    if (!vm.isEmbedded) {
+                        ConnectionPanel(
+                            vm = vm,
+                            revealPassword = revealPassword,
+                            onRevealChange = { revealPassword = it }
                         )
                     }
-                },
-                colors = fieldColors()
-            )
-            Spacer(Modifier.height(12.dp))
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Button(
-                    onClick = { vm.connect() },
-                    modifier = Modifier.weight(1f),
-                    shape = RoundedCornerShape(13.dp),
-                    enabled = vm.status != ConnState.CONNECTING
-                ) {
-                    if (vm.status == ConnState.CONNECTING) {
-                        CircularProgressIndicator(
-                            modifier = Modifier.size(14.dp),
-                            color = Accent,
-                            strokeWidth = 1.5.dp
-                        )
-                        Spacer(Modifier.width(8.dp))
-                    }
-                    Text(if (vm.status == ConnState.CONNECTED) "Переподключиться" else "Подключиться")
+                    ServerPanel(vm)
+                    ConfigPanel(vm)
+                    QuotaPanel(vm)
                 }
-                OutlinedButton(
-                    onClick = { vm.forgetPassword() },
-                    shape = RoundedCornerShape(13.dp)
-                ) {
-                    Text("Забыть пароль", fontSize = 11.5.sp)
+
+                SettingsSection.FILES -> {
+                    WorkspacePanel(vm)
+                    MigrationPanel(vm)
+                }
+
+                SettingsSection.ENVIRONMENT -> {
+                    EnvironmentPanel(vm)
+                    DevPanel()
+                }
+
+                SettingsSection.MCP -> McpPanel(vm)
+
+                SettingsSection.APP -> {
+                    UpdatesPanel(vm)
+                    SessionPanel(vm)
+                    DataPanel(vm) { confirmReset = true }
                 }
             }
-            if (vm.statusDetail.isNotBlank()) {
-                Spacer(Modifier.height(10.dp))
-                Text(
-                    vm.statusDetail,
-                    color = if (vm.status == ConnState.ERROR) Danger else Muted,
-                    fontSize = 11.sp,
-                    lineHeight = 16.sp
-                )
-            }
-            Spacer(Modifier.height(10.dp))
-            HorizontalDivider(color = Line)
-            Spacer(Modifier.height(10.dp))
+
             Text(
-                "Пароль хранится в зашифрованном виде (Android Keystore, AES-256-GCM) и никуда не отправляется, кроме самого сервера.",
+                "OpenCode Pocket · не открывай сервер в публичный интернет без пароля и TLS.",
                 color = Dim,
-                fontSize = 10.5.sp,
-                lineHeight = 15.sp
+                fontSize = 10.sp,
+                lineHeight = 14.sp,
+                modifier = Modifier.padding(bottom = 8.dp)
             )
-            }
         }
-
-        Panel {
-            SectionTitle("Обновления")
-            Spacer(Modifier.height(8.dp))
-            KeyValueRow("Версия", "${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE})")
-            if (vm.updateStatus.isNotBlank()) {
-                Spacer(Modifier.height(6.dp))
-                Text(vm.updateStatus, color = Mint, fontSize = 11.5.sp)
-            }
-            if (vm.updateError.isNotBlank()) {
-                Spacer(Modifier.height(6.dp))
-                Text(vm.updateError, color = Danger, fontSize = 11.sp, lineHeight = 16.sp)
-            }
-            val info = vm.updateInfo
-            if (info != null) {
-                Spacer(Modifier.height(6.dp))
-                KeyValueRow("Доступно", info.versionName)
-                Text(
-                    "${info.size / 1024 / 1024} МБ · GitHub",
-                    color = Dim,
-                    fontSize = 10.5.sp
-                )
-                if (vm.updateBusy) {
-                    Spacer(Modifier.height(8.dp))
-                    LinearProgressIndicator(
-                        progress = { vm.updateProgress },
-                        modifier = Modifier.fillMaxWidth(),
-                        color = Accent,
-                        trackColor = Line
-                    )
-                }
-                Spacer(Modifier.height(10.dp))
-                Button(
-                    onClick = { vm.downloadAndInstallUpdate() },
-                    shape = RoundedCornerShape(13.dp),
-                    modifier = Modifier.fillMaxWidth(),
-                    enabled = !vm.updateBusy
-                ) {
-                    Text("Скачать и установить", fontSize = 11.5.sp)
-                }
-                if (vm.updateNeedsPermission) {
-                    Spacer(Modifier.height(8.dp))
-                    OutlinedButton(
-                        onClick = { vm.openInstallPermission() },
-                        shape = RoundedCornerShape(13.dp),
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Text("Разрешить установку", fontSize = 11.5.sp)
-                    }
-                }
-            } else {
-                Spacer(Modifier.height(10.dp))
-                OutlinedButton(
-                    onClick = { vm.checkForUpdates(manual = true) },
-                    shape = RoundedCornerShape(13.dp),
-                    modifier = Modifier.fillMaxWidth(),
-                    enabled = !vm.updateBusy
-                ) {
-                    Text(if (vm.updateBusy) "Проверяю…" else "Проверить обновления", fontSize = 11.5.sp)
-                }
-            }
-        }
-
-        Panel {
-            SectionTitle("Активная сессия")
-            Spacer(Modifier.height(8.dp))
-            if (vm.sessionId == null) {
-                Text("Сессия не выбрана", color = Muted, fontSize = 12.sp)
-                Spacer(Modifier.height(10.dp))
-                Button(
-                    onClick = { vm.newSession() },
-                    shape = RoundedCornerShape(13.dp),
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Text("Создать сессию")
-                }
-            } else {
-                KeyValueRow("Название", vm.sessionTitle.ifBlank { "Без названия" })
-                KeyValueRow("ID", vm.sessionId.orEmpty(), mono = true)
-                KeyValueRow("Агент", vm.agentLabel)
-                KeyValueRow("Модель", vm.modelLabel)
-                vm.variantLabel?.let { KeyValueRow("Вариант", it, mono = true) }
-                KeyValueRow("Каталог", vm.sessionDirectory.ifBlank { vm.directoryLabel }, mono = true)
-                if (vm.tokensIn > 0L || vm.tokensOut > 0L) {
-                    KeyValueRow(
-                        "Токены",
-                        "${shortNumber(vm.tokensIn)} → ${shortNumber(vm.tokensOut)}",
-                        mono = true
-                    )
-                }
-                if (vm.sessionCost > 0.0) {
-                    KeyValueRow(
-                        "Стоимость",
-                        "$" + String.format(Locale.US, "%.4f", vm.sessionCost),
-                        mono = true
-                    )
-                }
-                Spacer(Modifier.height(12.dp))
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Button(
-                        onClick = { vm.newSession() },
-                        shape = RoundedCornerShape(13.dp),
-                        modifier = Modifier.weight(1f)
-                    ) {
-                        Text("Новая сессия")
-                    }
-                    OutlinedButton(
-                        onClick = { vm.refreshEverything() },
-                        shape = RoundedCornerShape(13.dp)
-                    ) {
-                        Text("Обновить")
-                    }
-                }
-            }
-        }
-
-        Panel {
-            SectionTitle("Данные на устройстве")
-            Spacer(Modifier.height(8.dp))
-            Text(
-                "Адрес, пароль, выбранная сессия, черновик сообщения и история переписки сохраняются автоматически и восстанавливаются при запуске. История подтягивается с сервера заново при каждом подключении.",
-                color = Muted,
-                fontSize = 11.5.sp,
-                lineHeight = 17.sp
-            )
-            Spacer(Modifier.height(12.dp))
-            OutlinedButton(
-                onClick = { confirmReset = true },
-                shape = RoundedCornerShape(13.dp),
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Text("Сбросить настройки и историю", color = Danger, fontSize = 12.sp)
-            }
-        }
-
-        Text(
-            "OpenCode Pocket · не открывай сервер в публичный интернет без пароля и TLS.",
-            color = Dim,
-            fontSize = 10.sp,
-            lineHeight = 14.sp,
-            modifier = Modifier.padding(bottom = 8.dp)
-        )
     }
 
     if (confirmReset) {
@@ -407,6 +163,378 @@ fun SettingsScreen(vm: PocketViewModel) {
                 }
             }
         )
+    }
+}
+
+/** Короткая сводка всегда на виду, чтобы не открывать «Сервер» ради статуса. */
+@Composable
+private fun SettingsSummary(vm: PocketViewModel) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .horizontalScroll(rememberScrollState()),
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        StatusPill(serverStatusLabel(vm), serverStatusTone(vm))
+        MetricPill(if (vm.isEmbedded) "встроенный" else "внешний", Muted)
+        MetricPill("v${BuildConfig.VERSION_NAME}", Muted)
+        if (!vm.hasAllFilesAccess) MetricPill("нет доступа к файлам", Warn)
+    }
+}
+
+@Composable
+private fun SettingsTabs(selected: SettingsSection, onSelect: (SettingsSection) -> Unit) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .horizontalScroll(rememberScrollState()),
+        horizontalArrangement = Arrangement.spacedBy(6.dp)
+    ) {
+        SettingsSection.entries.forEach { item ->
+            val active = item == selected
+            Row(
+                modifier = Modifier
+                    .clip(RoundedCornerShape(11.dp))
+                    .background(if (active) Accent.copy(alpha = 0.16f) else Card2.copy(alpha = 0.7f))
+                    .border(
+                        width = 1.dp,
+                        color = if (active) Accent.copy(alpha = 0.3f) else Line.copy(alpha = 0.5f),
+                        shape = RoundedCornerShape(11.dp)
+                    )
+                    .clickable { onSelect(item) }
+                    .padding(horizontal = 12.dp, vertical = 8.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    item.title,
+                    color = if (active) Accent else Muted,
+                    fontSize = 11.5.sp,
+                    lineHeight = 15.sp,
+                    fontWeight = if (active) FontWeight.SemiBold else FontWeight.Medium,
+                    maxLines = 1
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun ConnectionPanel(
+    vm: PocketViewModel,
+    revealPassword: Boolean,
+    onRevealChange: (Boolean) -> Unit
+) {
+    Panel {
+        SectionTitle("Подключение")
+        Spacer(Modifier.height(10.dp))
+        OutlinedTextField(
+            value = vm.baseUrl,
+            onValueChange = vm::onBaseUrlChange,
+            modifier = Modifier.fillMaxWidth(),
+            label = { Text("Адрес сервера", color = Muted, fontSize = 11.sp) },
+            placeholder = { Text("http://127.0.0.1:4096", color = Dim, fontSize = 13.sp) },
+            singleLine = true,
+            shape = RoundedCornerShape(13.dp),
+            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri),
+            colors = fieldColors()
+        )
+        Spacer(Modifier.height(9.dp))
+        OutlinedTextField(
+            value = vm.password,
+            onValueChange = vm::onPasswordChange,
+            modifier = Modifier.fillMaxWidth(),
+            label = { Text("Пароль сервера", color = Muted, fontSize = 11.sp) },
+            placeholder = { Text("если задан", color = Dim, fontSize = 13.sp) },
+            singleLine = true,
+            shape = RoundedCornerShape(13.dp),
+            visualTransformation = if (revealPassword) {
+                VisualTransformation.None
+            } else {
+                PasswordVisualTransformation()
+            },
+            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+            trailingIcon = {
+                TextButton(
+                    onClick = { onRevealChange(!revealPassword) },
+                    contentPadding = androidx.compose.foundation.layout.PaddingValues(
+                        horizontal = 10.dp,
+                        vertical = 0.dp
+                    )
+                ) {
+                    Text(
+                        if (revealPassword) "скрыть" else "показать",
+                        color = Muted,
+                        fontSize = 10.5.sp
+                    )
+                }
+            },
+            colors = fieldColors()
+        )
+        Spacer(Modifier.height(12.dp))
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Button(
+                onClick = { vm.connect() },
+                modifier = Modifier.weight(1f),
+                shape = RoundedCornerShape(13.dp),
+                enabled = vm.status != ConnState.CONNECTING
+            ) {
+                if (vm.status == ConnState.CONNECTING) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(14.dp),
+                        color = Accent,
+                        strokeWidth = 1.5.dp
+                    )
+                    Spacer(Modifier.width(8.dp))
+                }
+                Text(if (vm.status == ConnState.CONNECTED) "Переподключиться" else "Подключиться")
+            }
+            OutlinedButton(
+                onClick = { vm.forgetPassword() },
+                shape = RoundedCornerShape(13.dp)
+            ) {
+                Text("Забыть пароль", fontSize = 11.5.sp)
+            }
+        }
+        if (vm.statusDetail.isNotBlank()) {
+            Spacer(Modifier.height(10.dp))
+            Text(
+                vm.statusDetail,
+                color = if (vm.status == ConnState.ERROR) Danger else Muted,
+                fontSize = 11.sp,
+                lineHeight = 16.sp
+            )
+        }
+        Spacer(Modifier.height(10.dp))
+        HorizontalDivider(color = Line)
+        Spacer(Modifier.height(10.dp))
+        Text(
+            "Пароль хранится в зашифрованном виде (Android Keystore, AES-256-GCM) и никуда не отправляется, кроме самого сервера.",
+            color = Dim,
+            fontSize = 10.5.sp,
+            lineHeight = 15.sp
+        )
+    }
+}
+
+@Composable
+private fun ConfigPanel(vm: PocketViewModel) {
+    var showConfig by rememberSaveable { mutableStateOf(false) }
+
+    Panel {
+        SectionTitle("Конфиг OpenCode") {
+            TextButton(
+                onClick = {
+                    showConfig = !showConfig
+                    if (showConfig) vm.loadConfig()
+                },
+                contentPadding = androidx.compose.foundation.layout.PaddingValues(
+                    horizontal = 8.dp,
+                    vertical = 0.dp
+                )
+            ) {
+                Text(if (showConfig) "Скрыть" else "Открыть", color = Accent, fontSize = 11.sp)
+            }
+        }
+        if (showConfig) {
+            Spacer(Modifier.height(8.dp))
+            Text(
+                vm.configFilePath().absolutePath,
+                color = Dim,
+                fontSize = 9.5.sp,
+                fontFamily = FontFamily.Monospace,
+                lineHeight = 14.sp
+            )
+            Spacer(Modifier.height(8.dp))
+            OutlinedTextField(
+                value = vm.configText,
+                onValueChange = {
+                    vm.configText = it
+                    vm.configError = ""
+                },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(220.dp),
+                label = { Text("opencode.json", color = Muted, fontSize = 11.sp) },
+                shape = RoundedCornerShape(13.dp),
+                textStyle = androidx.compose.ui.text.TextStyle(
+                    fontFamily = FontFamily.Monospace,
+                    fontSize = 11.sp
+                ),
+                colors = fieldColors()
+            )
+            if (vm.configError.isNotBlank()) {
+                Spacer(Modifier.height(6.dp))
+                Text(vm.configError, color = Danger, fontSize = 11.sp, lineHeight = 16.sp)
+            }
+            Spacer(Modifier.height(10.dp))
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Button(
+                    onClick = { vm.saveConfig(vm.configText) },
+                    shape = RoundedCornerShape(13.dp),
+                    modifier = Modifier.weight(1f)
+                ) {
+                    Text("Сохранить", fontSize = 11.5.sp)
+                }
+                OutlinedButton(
+                    onClick = { vm.loadConfig() },
+                    shape = RoundedCornerShape(13.dp)
+                ) {
+                    Text("Сбросить", fontSize = 11.5.sp)
+                }
+            }
+            Spacer(Modifier.height(8.dp))
+            OutlinedButton(
+                onClick = { vm.restartEmbedded() },
+                shape = RoundedCornerShape(13.dp),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text("Перезагрузить сервер", fontSize = 11.5.sp)
+            }
+        }
+    }
+}
+
+@Composable
+private fun UpdatesPanel(vm: PocketViewModel) {
+    Panel {
+        SectionTitle("Обновления")
+        Spacer(Modifier.height(8.dp))
+        KeyValueRow("Версия", "${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE})")
+        if (vm.updateStatus.isNotBlank()) {
+            Spacer(Modifier.height(6.dp))
+            Text(vm.updateStatus, color = Mint, fontSize = 11.5.sp)
+        }
+        if (vm.updateError.isNotBlank()) {
+            Spacer(Modifier.height(6.dp))
+            Text(vm.updateError, color = Danger, fontSize = 11.sp, lineHeight = 16.sp)
+        }
+        val info = vm.updateInfo
+        if (info != null) {
+            Spacer(Modifier.height(6.dp))
+            KeyValueRow("Доступно", info.versionName)
+            Text(
+                "${info.size / 1024 / 1024} МБ · GitHub",
+                color = Dim,
+                fontSize = 10.5.sp
+            )
+            if (vm.updateBusy) {
+                Spacer(Modifier.height(8.dp))
+                LinearProgressIndicator(
+                    progress = { vm.updateProgress },
+                    modifier = Modifier.fillMaxWidth(),
+                    color = Accent,
+                    trackColor = Line
+                )
+            }
+            Spacer(Modifier.height(10.dp))
+            Button(
+                onClick = { vm.downloadAndInstallUpdate() },
+                shape = RoundedCornerShape(13.dp),
+                modifier = Modifier.fillMaxWidth(),
+                enabled = !vm.updateBusy
+            ) {
+                Text("Скачать и установить", fontSize = 11.5.sp)
+            }
+            if (vm.updateNeedsPermission) {
+                Spacer(Modifier.height(8.dp))
+                OutlinedButton(
+                    onClick = { vm.openInstallPermission() },
+                    shape = RoundedCornerShape(13.dp),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text("Разрешить установку", fontSize = 11.5.sp)
+                }
+            }
+        } else {
+            Spacer(Modifier.height(10.dp))
+            OutlinedButton(
+                onClick = { vm.checkForUpdates(manual = true) },
+                shape = RoundedCornerShape(13.dp),
+                modifier = Modifier.fillMaxWidth(),
+                enabled = !vm.updateBusy
+            ) {
+                Text(if (vm.updateBusy) "Проверяю…" else "Проверить обновления", fontSize = 11.5.sp)
+            }
+        }
+    }
+}
+
+@Composable
+private fun SessionPanel(vm: PocketViewModel) {
+    Panel {
+        SectionTitle("Активная сессия")
+        Spacer(Modifier.height(8.dp))
+        if (vm.sessionId == null) {
+            Text("Сессия не выбрана", color = Muted, fontSize = 12.sp)
+            Spacer(Modifier.height(10.dp))
+            Button(
+                onClick = { vm.newSession() },
+                shape = RoundedCornerShape(13.dp),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text("Создать сессию")
+            }
+        } else {
+            KeyValueRow("Название", vm.sessionTitle.ifBlank { "Без названия" })
+            KeyValueRow("ID", vm.sessionId.orEmpty(), mono = true)
+            KeyValueRow("Агент", vm.agentLabel)
+            KeyValueRow("Модель", vm.modelLabel)
+            vm.variantLabel?.let { KeyValueRow("Вариант", it, mono = true) }
+            KeyValueRow("Каталог", vm.sessionDirectory.ifBlank { vm.directoryLabel }, mono = true)
+            if (vm.tokensIn > 0L || vm.tokensOut > 0L) {
+                KeyValueRow(
+                    "Токены",
+                    "${shortNumber(vm.tokensIn)} → ${shortNumber(vm.tokensOut)}",
+                    mono = true
+                )
+            }
+            if (vm.sessionCost > 0.0) {
+                KeyValueRow(
+                    "Стоимость",
+                    "$" + String.format(Locale.US, "%.4f", vm.sessionCost),
+                    mono = true
+                )
+            }
+            Spacer(Modifier.height(12.dp))
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Button(
+                    onClick = { vm.newSession() },
+                    shape = RoundedCornerShape(13.dp),
+                    modifier = Modifier.weight(1f)
+                ) {
+                    Text("Новая сессия")
+                }
+                OutlinedButton(
+                    onClick = { vm.refreshEverything() },
+                    shape = RoundedCornerShape(13.dp)
+                ) {
+                    Text("Обновить")
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun DataPanel(vm: PocketViewModel, onReset: () -> Unit) {
+    Panel {
+        SectionTitle("Данные на устройстве")
+        Spacer(Modifier.height(8.dp))
+        Text(
+            "Адрес, пароль, выбранная сессия, черновик сообщения и история переписки сохраняются автоматически и восстанавливаются при запуске. История подтягивается с сервера заново при каждом подключении.",
+            color = Muted,
+            fontSize = 11.5.sp,
+            lineHeight = 17.sp
+        )
+        Spacer(Modifier.height(12.dp))
+        OutlinedButton(
+            onClick = onReset,
+            shape = RoundedCornerShape(13.dp),
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Text("Сбросить настройки и историю", color = Danger, fontSize = 12.sp)
+        }
     }
 }
 
