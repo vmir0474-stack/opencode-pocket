@@ -866,6 +866,8 @@ private fun MessageItem(message: UiMessage, live: Boolean, onOpenModels: () -> U
 
 @Composable
 private fun UserBubble(message: UiMessage) {
+    val clipboard = LocalClipboardManager.current
+    val context = LocalContext.current
     val text = message.blocks.filterIsInstance<UiBlock.Text>()
         .joinToString("\n") { it.content }
     val images = message.blocks.filterIsInstance<UiBlock.Image>()
@@ -912,14 +914,38 @@ private fun UserBubble(message: UiMessage) {
                     }
                 }
             }
-            Text(
-                timeLabel(message.createdAt),
-                color = Dim,
-                fontSize = 9.5.sp,
+            Row(
                 modifier = Modifier
                     .align(Alignment.End)
-                    .padding(top = 4.dp, end = 4.dp)
-            )
+                    .padding(top = 4.dp, end = 4.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                if (text.isNotBlank()) {
+                    Box(
+                        modifier = Modifier
+                            .size(24.dp)
+                            .clip(CircleShape)
+                            .clickable {
+                                clipboard.setText(AnnotatedString(text))
+                                Toast.makeText(context, "Сообщение скопировано", Toast.LENGTH_SHORT).show()
+                            },
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            Icons.Outlined.ContentCopy,
+                            contentDescription = "Копировать сообщение",
+                            tint = Dim,
+                            modifier = Modifier.size(12.dp)
+                        )
+                    }
+                    Spacer(Modifier.width(6.dp))
+                }
+                Text(
+                    timeLabel(message.createdAt),
+                    color = Dim,
+                    fontSize = 9.5.sp
+                )
+            }
         }
     }
 }
@@ -927,8 +953,13 @@ private fun UserBubble(message: UiMessage) {
 @Composable
 private fun AssistantMessage(message: UiMessage, live: Boolean, onOpenModels: () -> Unit) {
     val clipboard = LocalClipboardManager.current
+    val context = LocalContext.current
     val plain = remember(message.blocks) {
         message.blocks.filterIsInstance<UiBlock.Text>().joinToString("\n\n") { it.content }
+    }
+    val copyAnswer = {
+        clipboard.setText(AnnotatedString(plain))
+        Toast.makeText(context, "Ответ скопирован", Toast.LENGTH_SHORT).show()
     }
     Column(Modifier.fillMaxWidth()) {
         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -965,21 +996,20 @@ private fun AssistantMessage(message: UiMessage, live: Boolean, onOpenModels: ()
                 modifier = Modifier.weight(1f)
             )
             if (plain.isNotBlank()) {
-                Box(
-                    modifier = Modifier
-                        .size(30.dp)
-                        .clip(CircleShape)
-                        .clickable { clipboard.setText(AnnotatedString(plain)) },
-                    contentAlignment = Alignment.Center
+                TextButton(
+                    onClick = copyAnswer,
+                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp),
+                    modifier = Modifier.height(30.dp)
                 ) {
                     Icon(
                         Icons.Outlined.ContentCopy,
-                        contentDescription = "Копировать ответ",
-                        tint = Dim,
-                        modifier = Modifier.size(15.dp)
+                        contentDescription = null,
+                        tint = Muted,
+                        modifier = Modifier.size(14.dp)
                     )
+                    Spacer(Modifier.width(5.dp))
+                    Text("Копировать", color = Muted, fontSize = 10.5.sp)
                 }
-                Spacer(Modifier.width(2.dp))
             }
             Text(timeLabel(message.createdAt), color = Dim, fontSize = 9.5.sp)
         }
@@ -1001,6 +1031,27 @@ private fun AssistantMessage(message: UiMessage, live: Boolean, onOpenModels: ()
             val blockLive = live && index == blocks.lastIndex
             BlockView(block, blockLive)
             if (index != blocks.lastIndex) Spacer(Modifier.height(10.dp))
+        }
+        if (plain.length > 500) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.End
+            ) {
+                TextButton(
+                    onClick = copyAnswer,
+                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp),
+                    modifier = Modifier.height(30.dp)
+                ) {
+                    Icon(
+                        Icons.Outlined.ContentCopy,
+                        contentDescription = null,
+                        tint = Dim,
+                        modifier = Modifier.size(13.dp)
+                    )
+                    Spacer(Modifier.width(5.dp))
+                    Text("Копировать ответ", color = Dim, fontSize = 10.sp)
+                }
+            }
         }
         message.error?.takeIf { it.isNotBlank() }?.let { error ->
             val failure = providerFailure(message.errorType, error)
@@ -1060,28 +1111,214 @@ private fun BlockView(block: UiBlock, live: Boolean) {
 
 @Composable
 private fun MarkdownText(content: String, live: Boolean) {
-    val chunks = remember(content, live) {
-        markdownChunks(if (live) "$content ▍" else content)
+    val blocks = remember(content, live) {
+        markdownBlocks(if (live) "$content ▍" else content)
     }
-    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        chunks.forEach { chunk ->
-            when (chunk) {
-                is MdChunk.Prose -> if (chunk.text.isNotEmpty()) {
-                    SelectionContainer {
-                        Text(
-                            proseAnnotated(chunk.text),
-                            color = TextMain,
-                            fontSize = 14.5.sp,
-                            lineHeight = 21.sp
-                        )
-                    }
-                }
+    Column(verticalArrangement = Arrangement.spacedBy(9.dp)) {
+        blocks.forEachIndexed { index, block ->
+            MarkdownBlock(block, first = index == 0)
+        }
+    }
+}
 
-                is MdChunk.Code -> CodeBlock(chunk.lang, chunk.text)
+@Composable
+private fun MarkdownBlock(block: MdBlock, first: Boolean) {
+    when (block) {
+        is MdBlock.Heading -> {
+            val size = when (block.level) {
+                1 -> 21.sp
+                2 -> 18.5.sp
+                3 -> 16.5.sp
+                4 -> 15.sp
+                else -> 13.5.sp
+            }
+            val line = when (block.level) {
+                1 -> 28.sp
+                2 -> 25.sp
+                3 -> 22.sp
+                else -> 19.sp
+            }
+            val weight = if (block.level <= 2) FontWeight.Bold else FontWeight.SemiBold
+            val color = if (block.level <= 4) TextMain else Muted
+            SelectionContainer {
+                Text(
+                    inlineAnnotated(block.text),
+                    color = color,
+                    fontSize = size,
+                    lineHeight = line,
+                    fontWeight = weight,
+                    modifier = Modifier.padding(top = if (first) 0.dp else 5.dp)
+                )
+            }
+        }
+
+        is MdBlock.Paragraph -> SelectionContainer {
+            Text(
+                proseAnnotated(block.text),
+                color = TextMain,
+                fontSize = 14.5.sp,
+                lineHeight = 21.5.sp
+            )
+        }
+
+        is MdBlock.BulletList -> Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            block.items.forEach { ListItemRow(it) }
+        }
+
+        is MdBlock.OrderedList -> Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            block.items.forEachIndexed { index, item -> ListItemRow(item, index + 1) }
+        }
+
+        is MdBlock.Quote -> QuoteBlock(block)
+
+        is MdBlock.Table -> MarkdownTable(block)
+
+        is MdBlock.Code -> CodeBlock(block.lang, block.text)
+
+        MdBlock.Rule -> HorizontalDivider(
+            color = Line,
+            modifier = Modifier.padding(vertical = 3.dp)
+        )
+    }
+}
+
+@Composable
+private fun ListItemRow(item: MdListItem, fallbackNumber: Int = 1) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(start = (item.level * 16).dp),
+        verticalAlignment = Alignment.Top
+    ) {
+        val marker = when {
+            item.checked != null -> if (item.checked) "☑" else "☐"
+            item.number != null -> "${item.number ?: fallbackNumber}."
+            item.level == 0 -> "•"
+            item.level == 1 -> "◦"
+            else -> "▪"
+        }
+        val tint = when {
+            item.checked == true -> Mint
+            item.checked == false -> Muted
+            item.number != null -> Muted
+            item.level == 0 -> Accent
+            else -> Muted
+        }
+        Text(
+            marker,
+            color = tint,
+            fontSize = if (item.number != null) 12.sp else 14.sp,
+            lineHeight = 21.sp,
+            fontFamily = if (item.number != null) FontFamily.Monospace else FontFamily.Default,
+            textAlign = TextAlign.End,
+            modifier = Modifier
+                .width(if (item.number != null) 28.dp else 18.dp)
+                .padding(end = 6.dp)
+        )
+        SelectionContainer(Modifier.weight(1f)) {
+            Text(
+                proseAnnotated(item.text),
+                color = TextMain,
+                fontSize = 14.sp,
+                lineHeight = 21.sp
+            )
+        }
+    }
+}
+
+@Composable
+private fun QuoteBlock(block: MdBlock.Quote) {
+    Row(Modifier.fillMaxWidth()) {
+        Box(
+            Modifier
+                .width(3.dp)
+                .heightIn(min = 22.dp)
+                .clip(RoundedCornerShape(2.dp))
+                .background(Accent.copy(alpha = 0.55f))
+        )
+        Spacer(Modifier.width(10.dp))
+        SelectionContainer(Modifier.weight(1f)) {
+            Text(
+                inlineAnnotated(block.lines.joinToString("\n").trim()),
+                color = Muted,
+                fontSize = 13.5.sp,
+                lineHeight = 20.sp
+            )
+        }
+    }
+}
+
+@Composable
+private fun MarkdownTable(block: MdBlock.Table) {
+    val columns = maxOf(block.header.size, block.rows.maxOfOrNull { it.size } ?: 0)
+    if (columns == 0) return
+    val widths = remember(block) {
+        (0 until columns).map { column ->
+            val longest = (listOf(block.header.getOrNull(column).orEmpty()) +
+                block.rows.map { it.getOrNull(column).orEmpty() })
+                .maxOf { cell -> visibleLength(cell) }
+            (longest.coerceIn(7, 28) * 7.4f).dp
+        }
+    }
+    Box(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState())) {
+        Column(
+            Modifier
+                .clip(RoundedCornerShape(11.dp))
+                .border(1.dp, Line, RoundedCornerShape(11.dp))
+        ) {
+            TableRow(block.header, widths, block.align, header = true, shaded = false)
+            block.rows.forEachIndexed { index, row ->
+                HorizontalDivider(color = Line.copy(alpha = 0.7f))
+                TableRow(row, widths, block.align, header = false, shaded = index % 2 == 1)
             }
         }
     }
 }
+
+@Composable
+private fun TableRow(
+    cells: List<String>,
+    widths: List<androidx.compose.ui.unit.Dp>,
+    align: List<MdAlign>,
+    header: Boolean,
+    shaded: Boolean
+) {
+    Row(
+        Modifier.background(
+            when {
+                header -> Accent.copy(alpha = 0.10f)
+                shaded -> Card2.copy(alpha = 0.32f)
+                else -> Color.Transparent
+            }
+        )
+    ) {
+        widths.forEachIndexed { index, width ->
+            val textAlign = when (align.getOrNull(index) ?: MdAlign.START) {
+                MdAlign.START -> TextAlign.Start
+                MdAlign.CENTER -> TextAlign.Center
+                MdAlign.END -> TextAlign.End
+            }
+            SelectionContainer {
+                Text(
+                    inlineAnnotated(cells.getOrNull(index).orEmpty()),
+                    color = TextMain.copy(alpha = if (header) 1f else 0.92f),
+                    fontSize = 12.5.sp,
+                    lineHeight = 17.5.sp,
+                    fontWeight = if (header) FontWeight.SemiBold else FontWeight.Normal,
+                    textAlign = textAlign,
+                    modifier = Modifier
+                        .width(width)
+                        .padding(horizontal = 9.dp, vertical = 7.dp)
+                )
+            }
+        }
+    }
+}
+
+private fun visibleLength(cell: String): Int = cell
+    .replace(Regex("!?\\[([^\\]]*)]\\([^)]*\\)"), "$1")
+    .replace(Regex("[*_~`]"), "")
+    .length
 
 @Composable
 private fun CodeBlock(lang: String, code: String) {
@@ -1211,11 +1448,21 @@ private fun ReasoningBlock(block: UiBlock.Reasoning, live: Boolean) {
 
 @Composable
 private fun ToolBlock(block: UiBlock.Tool) {
+    val clipboard = LocalClipboardManager.current
+    val context = LocalContext.current
     val (statusLabel, statusColor) = toolStatusLabel(block.status)
     val running = block.status == "running" || block.status == "streaming"
     var expanded by rememberSaveable(block.callId) { mutableStateOf(running) }
+    var touched by rememberSaveable(block.callId) { mutableStateOf(false) }
+    var rawInput by rememberSaveable(block.callId) { mutableStateOf(false) }
+    LaunchedEffect(running) {
+        // Завершённый инструмент сворачиваем, чтобы длинные ответы не тонули
+        // в выводе команд. Ручное раскрытие пользователем не трогаем.
+        if (!running && !touched) expanded = false
+    }
     val summary = toolSummary(block)
     val prettyInput = remember(block.input) { prettyJson(block.input) }
+    val fields = remember(block.name, block.input) { toolInputFields(block.name, block.input) }
     val patches = remember(block.name, block.input) { parseEditPatches(block.name, block.input) }
 
     Surface(
@@ -1223,13 +1470,15 @@ private fun ToolBlock(block: UiBlock.Tool) {
         shape = RoundedCornerShape(14.dp),
         border = BorderStroke(1.dp, if (block.status == "error") Danger.copy(alpha = 0.4f) else Line)
     ) {
-        Column(
-            Modifier
-                .fillMaxWidth()
-                .clickable { expanded = !expanded }
-        ) {
+        Column(Modifier.fillMaxWidth()) {
             Row(
-                modifier = Modifier.padding(start = 12.dp, end = 8.dp, top = 10.dp, bottom = 10.dp),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable {
+                        touched = true
+                        expanded = !expanded
+                    }
+                    .padding(start = 12.dp, end = 8.dp, top = 10.dp, bottom = 10.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Box(
@@ -1261,9 +1510,20 @@ private fun ToolBlock(block: UiBlock.Tool) {
                             color = Muted,
                             fontSize = 11.sp,
                             fontFamily = FontFamily.Monospace,
-                            maxLines = if (expanded) 4 else 1,
+                            maxLines = if (expanded) 2 else 1,
                             overflow = TextOverflow.Ellipsis
                         )
+                    }
+                    if (!expanded) {
+                        val hint = when {
+                            !block.error.isNullOrBlank() -> "ошибка"
+                            block.output.isNotBlank() -> "результат · ${outputLineCount(block.output)} стр."
+                            running -> "ждём результат…"
+                            else -> ""
+                        }
+                        if (hint.isNotBlank()) {
+                            Text(hint, color = Dim, fontSize = 9.5.sp, maxLines = 1)
+                        }
                     }
                 }
                 Spacer(Modifier.width(8.dp))
@@ -1294,18 +1554,56 @@ private fun ToolBlock(block: UiBlock.Tool) {
                             if (index > 0) Spacer(Modifier.height(10.dp))
                             EditDiffView(patch)
                         }
-                    } else if (prettyInput.isNotBlank() && prettyInput != summary) {
-                        BlockLabel("Вход")
-                        ScrollableCode(prettyInput, maxHeight = 200.dp)
+                    } else {
+                        if (fields.isNotEmpty() && !rawInput) {
+                            BlockLabel("Параметры")
+                            fields.forEach { (label, value) -> ToolField(label, value) }
+                        }
+                        if (prettyInput.isNotBlank() && (fields.isEmpty() || rawInput)) {
+                            if (fields.isNotEmpty()) Spacer(Modifier.height(4.dp))
+                            BlockLabel(if (fields.isEmpty()) "Вход" else "JSON")
+                            ScrollableCode(prettyInput, maxHeight = 200.dp)
+                        }
+                        if (fields.isNotEmpty()) {
+                            TextButton(
+                                onClick = { rawInput = !rawInput },
+                                contentPadding = PaddingValues(horizontal = 0.dp, vertical = 0.dp),
+                                modifier = Modifier.height(28.dp)
+                            ) {
+                                Text(
+                                    if (rawInput) "Скрыть JSON" else "Показать JSON",
+                                    color = Dim,
+                                    fontSize = 10.sp
+                                )
+                            }
+                        }
                     }
                     if (block.output.isNotBlank()) {
                         Spacer(Modifier.height(8.dp))
-                        BlockLabel(if (block.shellId != null) "Вывод команды" else "Результат")
-                        ScrollableCode(block.output, maxHeight = 320.dp)
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            BlockLabel(if (block.shellId != null) "Вывод команды" else "Результат")
+                            Spacer(Modifier.weight(1f))
+                            TextButton(
+                                onClick = {
+                                    clipboard.setText(AnnotatedString(block.output))
+                                    Toast.makeText(context, "Вывод скопирован", Toast.LENGTH_SHORT).show()
+                                },
+                                contentPadding = PaddingValues(horizontal = 6.dp, vertical = 0.dp),
+                                modifier = Modifier.height(26.dp)
+                            ) {
+                                Text("Копировать", color = Accent, fontSize = 10.sp)
+                            }
+                        }
+                        ToolOutput(block)
                     }
                     block.error?.takeIf { it.isNotBlank() }?.let { error ->
                         Spacer(Modifier.height(8.dp))
-                        Text(error, color = Danger, fontSize = 11.5.sp, fontFamily = FontFamily.Monospace)
+                        Text(
+                            error,
+                            color = Danger,
+                            fontSize = 11.5.sp,
+                            fontFamily = FontFamily.Monospace
+                        )
                     }
                     if (block.output.isBlank() && block.error.isNullOrBlank() && running) {
                         Row(
@@ -1334,6 +1632,149 @@ private fun ToolBlock(block: UiBlock.Tool) {
             }
         }
     }
+}
+
+/** Параметр инструмента в виде «подпись — значение» вместо сырого JSON. */
+@Composable
+private fun ToolField(label: String, value: String) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 2.dp),
+        verticalAlignment = Alignment.Top
+    ) {
+        Text(
+            label,
+            color = Muted,
+            fontSize = 10.5.sp,
+            modifier = Modifier.width(84.dp)
+        )
+        SelectionContainer(Modifier.weight(1f)) {
+            Text(
+                value,
+                color = TextMain,
+                fontSize = 11.5.sp,
+                lineHeight = 16.sp,
+                fontFamily = FontFamily.Monospace
+            )
+        }
+    }
+}
+
+/**
+ * Результат инструмента: markdown для веб-страниц, моноширинный текст для
+ * команд. Очень длинный вывод обрезается до явного «Показать полностью».
+ */
+@Composable
+private fun ToolOutput(block: UiBlock.Tool) {
+    var full by rememberSaveable(block.callId) { mutableStateOf(false) }
+    val raw = block.output
+    val limit = 12_000
+    val shown = if (!full && raw.length > limit) raw.take(limit).trimEnd() else raw
+    val markdown = remember(block.name, raw) { looksLikeMarkdown(block.name, raw) }
+
+    Surface(
+        color = if (markdown) Card.copy(alpha = 0.55f) else CodeBg,
+        shape = RoundedCornerShape(10.dp),
+        border = BorderStroke(1.dp, Line.copy(alpha = 0.8f)),
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        if (markdown) {
+            Column(
+                Modifier
+                    .heightIn(max = 440.dp)
+                    .verticalScroll(rememberScrollState())
+                    .padding(12.dp)
+            ) {
+                MarkdownText(shown, live = false)
+            }
+        } else {
+            ScrollableCode(prettyOutput(shown), maxHeight = 340.dp)
+        }
+    }
+    if (!full && raw.length > limit) {
+        TextButton(
+            onClick = { full = true },
+            contentPadding = PaddingValues(horizontal = 0.dp, vertical = 0.dp)
+        ) {
+            Text(
+                "Показать полностью · ${raw.length / 1024} КБ",
+                color = Accent,
+                fontSize = 10.5.sp
+            )
+        }
+    }
+}
+
+private fun outputLineCount(text: String): Int =
+    text.count { it == '\n' } + if (text.endsWith('\n')) 0 else 1
+
+private fun looksLikeMarkdown(name: String, text: String): Boolean {
+    val lower = name.lowercase()
+    if (lower in setOf("webfetch", "fetch", "websearch", "web_search")) return true
+    if (text.length < 40) return false
+    val head = text.take(4_000)
+    return head.startsWith("#") ||
+        head.contains("\n## ") ||
+        head.contains("\n|") ||
+        head.contains("```")
+}
+
+private fun prettyOutput(text: String): String {
+    val trimmed = text.trim()
+    if (!trimmed.startsWith("{") && !trimmed.startsWith("[")) return text
+    return runCatching { JSONObject(trimmed).toString(2) }
+        .recoverCatching { org.json.JSONArray(trimmed).toString(2) }
+        .getOrDefault(text)
+}
+
+/** Понятные поля известных инструментов; сырой JSON остаётся за кнопкой. */
+private fun toolInputFields(name: String, raw: String): List<Pair<String, String>> {
+    val obj = runCatching { JSONObject(raw) }.getOrNull() ?: return emptyList()
+    val order = when (name.lowercase()) {
+        "webfetch", "fetch" -> listOf("url", "format", "timeout")
+        "websearch", "web_search" -> listOf("query", "max_results", "search_depth")
+        "read", "view", "cat" -> listOf("filePath", "file_path", "path", "offset", "limit")
+        "write", "create", "edit", "patch", "multiedit", "apply_patch" ->
+            listOf("filePath", "file_path", "path", "description")
+        "bash", "shell", "execute" -> listOf("command", "description", "workdir", "timeout")
+        "grep", "search" -> listOf("pattern", "path", "include")
+        "glob", "find" -> listOf("pattern", "path")
+        "task", "agent" -> listOf("description", "prompt")
+        else -> listOf(
+            "description", "command", "query", "url", "filePath",
+            "file_path", "path", "pattern", "prompt"
+        )
+    }
+    val labels = mapOf(
+        "url" to "Адрес",
+        "format" to "Формат",
+        "timeout" to "Таймаут",
+        "query" to "Запрос",
+        "max_results" to "Лимит",
+        "search_depth" to "Глубина",
+        "filePath" to "Файл",
+        "file_path" to "Файл",
+        "path" to "Путь",
+        "offset" to "Смещение",
+        "limit" to "Лимит",
+        "description" to "Описание",
+        "command" to "Команда",
+        "workdir" to "Каталог",
+        "pattern" to "Шаблон",
+        "include" to "Фильтр",
+        "prompt" to "Запрос"
+    )
+    val out = mutableListOf<Pair<String, String>>()
+    val seen = mutableSetOf<String>()
+    for (key in order) {
+        if (!seen.add(key)) continue
+        val value = obj.optText(key)?.replace('\n', ' ')?.trim() ?: continue
+        if (value.isEmpty()) continue
+        out += (labels[key] ?: key) to value.take(500)
+        if (out.size >= 5) break
+    }
+    return out
 }
 
 @Composable
@@ -1638,6 +2079,9 @@ private fun ShellMessage(message: UiMessage) {
 
 @Composable
 private fun ShellBlock(shell: UiBlock.Shell) {
+    val clipboard = LocalClipboardManager.current
+    val context = LocalContext.current
+    var expanded by rememberSaveable(shell.shellId) { mutableStateOf(true) }
     Surface(
         color = CodeBg,
         shape = RoundedCornerShape(14.dp),
@@ -1649,7 +2093,8 @@ private fun ShellBlock(shell: UiBlock.Shell) {
                 modifier = Modifier
                     .fillMaxWidth()
                     .background(Card2)
-                    .padding(horizontal = 12.dp, vertical = 8.dp),
+                    .clickable { expanded = !expanded }
+                    .padding(start = 12.dp, end = 6.dp, top = 8.dp, bottom = 8.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(
@@ -1665,11 +2110,12 @@ private fun ShellBlock(shell: UiBlock.Shell) {
                     color = TextMain,
                     fontFamily = FontFamily.Monospace,
                     fontSize = 11.5.sp,
-                    maxLines = 2,
+                    maxLines = if (expanded) 3 else 1,
                     overflow = TextOverflow.Ellipsis,
                     modifier = Modifier.weight(1f)
                 )
                 shell.exit?.let {
+                    Spacer(Modifier.width(6.dp))
                     Text(
                         "exit $it",
                         color = if (it == 0) Mint else Danger,
@@ -1677,8 +2123,34 @@ private fun ShellBlock(shell: UiBlock.Shell) {
                         fontFamily = FontFamily.Monospace
                     )
                 }
+                if (shell.output.isNotBlank()) {
+                    Spacer(Modifier.width(4.dp))
+                    Box(
+                        modifier = Modifier
+                            .size(26.dp)
+                            .clip(CircleShape)
+                            .clickable {
+                                clipboard.setText(AnnotatedString(shell.output))
+                                Toast.makeText(context, "Вывод скопирован", Toast.LENGTH_SHORT).show()
+                            },
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            Icons.Outlined.ContentCopy,
+                            contentDescription = "Копировать вывод",
+                            tint = Dim,
+                            modifier = Modifier.size(13.dp)
+                        )
+                    }
+                }
+                Icon(
+                    if (expanded) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
+                    contentDescription = null,
+                    tint = Dim,
+                    modifier = Modifier.size(17.dp)
+                )
             }
-            if (shell.output.isNotBlank()) {
+            if (expanded && shell.output.isNotBlank()) {
                 SelectionContainer {
                     Text(
                         shell.output,
