@@ -26,6 +26,7 @@ data class DebugEvent(
 
 object Redaction {
     private val rules = listOf(
+        Regex("(?i)(authorization\\s*[:=]\\s*)(?:bearer\\s+)?\\S+") to "$1***",
         Regex("(?i)(password|passwd|token|api[_-]?key|authorization)([\"']?\\s*[:=]\\s*[\"']?)[^\\s\"',}]+") to "$1$2***",
         Regex("(?i)\\b(password)\\s+[^\\s\"',}]+") to "$1 ***",
         Regex("(?i)Bearer\\s+[A-Za-z0-9._~+/=-]+") to "Bearer ***",

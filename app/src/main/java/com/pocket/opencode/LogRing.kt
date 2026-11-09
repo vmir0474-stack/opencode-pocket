@@ -10,7 +10,8 @@ class LogRing(private val capacity: Int = 400) {
     @Synchronized
     fun append(line: String) {
         if (capacity <= 0) return
-        lines.addLast(line)
+        // Сервер печатает пароль в первой строке лога — в UI он попадать не должен.
+        lines.addLast(Redaction.redact(line))
         while (lines.size > capacity) lines.removeFirst()
     }
 

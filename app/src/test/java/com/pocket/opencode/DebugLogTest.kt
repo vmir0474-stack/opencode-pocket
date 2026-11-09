@@ -43,4 +43,11 @@ class DebugLogTest {
         assertFalse(clean.contains("t1LF5Y8eWiyQvdjS8paP6kUCk9MMDqq3"))
         assertTrue(clean.startsWith("server password ***"))
     }
+
+    @Test
+    fun redactionMasksAuthorizationHeader() {
+        val clean = Redaction.redact("Authorization: Bearer abc.def-123_456")
+
+        assertEquals("Authorization: ***", clean)
+    }
 }
