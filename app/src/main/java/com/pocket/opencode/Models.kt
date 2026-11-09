@@ -199,10 +199,45 @@ data class UiMessage(
     val errorType: String? = null
 )
 
+/** Why a provider request failed, as far as the message lets us tell. */
+internal enum class ProviderFailure { QUOTA, NETWORK_BLOCK, REGION, AUTH, OTHER }
+
 /**
- * Free OpenCode models share a daily quota that resets at 00:00 UTC. When it runs out, point the
- * user to signing in to OpenCode Console or to their own provider key instead of showing the raw
- * English gateway error.
+ * The gateway reports four different problems with similar wording. Separating them matters:
+ * only quota clears on its own, while an abusive-traffic block is tied to the network and a
+ * region block never clears for that model.
+ */
+internal fun providerFailure(errorType: String?, error: String?): ProviderFailure {
+    val type = errorType.orEmpty().lowercase()
+    val text = error.orEmpty().lowercase()
+    return when {
+        type == "provider.free-limit" -> ProviderFailure.QUOTA
+        "free usage limit" in text || "free usage exceeded" in text -> ProviderFailure.QUOTA
+        "abusive traffic" in text ||
+            "aren't available from your current network" in text ||
+            "are not available from your current network" in text -> ProviderFailure.NETWORK_BLOCK
+        "not available in your" in text || "region" in text || "country" in text -> ProviderFailure.REGION
+        "unauthorized" in text || "invalid api key" in text ||
+            "invalid_api_key" in text || "401" in text -> ProviderFailure.AUTH
+        else -> ProviderFailure.OTHER
+    }
+}
+
+internal fun failureText(
+    failure: ProviderFailure,
+    raw: String,
+    now: Long = System.currentTimeMillis()
+): String = when (failure) {
+    ProviderFailure.QUOTA -> freeLimitText(now)
+    ProviderFailure.NETWORK_BLOCK -> networkBlockText()
+    ProviderFailure.REGION -> regionText()
+    ProviderFailure.AUTH -> authText()
+    ProviderFailure.OTHER -> raw
+}
+
+/**
+ * Free OpenCode models share a daily quota keyed to the network connection, not to the account.
+ * It resets at 00:00 UTC; signing in alone does not lift it.
  */
 internal fun freeLimitText(now: Long = System.currentTimeMillis()): String {
     val reset = (now / 86_400_000L + 1L) * 86_400_000L
@@ -215,10 +250,23 @@ internal fun freeLimitText(now: Long = System.currentTimeMillis()): String {
     }
     return buildString {
         appendLine("Бесплатный лимит OpenCode исчерпан.")
+        appendLine("Лимит общий для всех бесплатных моделей и считается по сетевому подключению.")
         appendLine("Сброс в 00:00 UTC, через $left.")
-        append("Чтобы продолжить: вкладка «Модели» → «Войти» в OpenCode Console или ключ своего провайдера.")
+        append("Продолжить: ключ своего провайдера или баланс OpenCode в разделе «Модели».")
     }
 }
+
+internal fun networkBlockText(): String =
+    "Бесплатные модели OpenCode недоступны с этого сетевого подключения: " +
+        "сработал фильтр abusive traffic. Это не связано с аккаунтом, и вход в Console его не снимает. " +
+        "Продолжить можно на платной модели, подписке Go или с ключом своего провайдера."
+
+internal fun regionText(): String =
+    "Эта модель недоступна в твоём регионе. Выбери другую модель или подключи своего провайдера " +
+        "в разделе «Модели»."
+
+internal fun authText(): String =
+    "Провайдер не принял ключ. Проверь ключ в разделе «Модели»."
 
 internal fun jsonText(value: Any?): String = when (value) {
     null, JSONObject.NULL -> ""

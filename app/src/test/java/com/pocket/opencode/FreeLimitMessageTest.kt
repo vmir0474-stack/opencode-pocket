@@ -28,13 +28,14 @@ class FreeLimitMessageTest {
     }
 
     @Test
-    fun `free limit text points at UTC reset and sign in`() {
+    fun `free limit text points at UTC reset and a provider key`() {
         val oneHourAfterMidnight = 86_400_000L * 20_000L + 3_600_000L
         val text = freeLimitText(oneHourAfterMidnight)
         assertTrue(text.contains("00:00 UTC"))
         assertTrue(text.contains("23 ч 0 мин"))
         assertTrue(text.contains("Модели"))
-        assertTrue(text.contains("Войти"))
+        assertTrue(text.contains("ключ"))
+        assertTrue(text.contains("всех бесплатных моделей"))
         assertTrue(!text.contains("привязан"))
         assertTrue(!text.contains("адрес"))
     }
