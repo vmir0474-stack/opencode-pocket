@@ -1,6 +1,7 @@
 package com.pocket.opencode
 
 import android.content.Context
+import android.os.SystemClock
 import android.util.Base64
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -29,7 +30,9 @@ data class EmbeddedStatus(
  */
 object EmbeddedServer {
     private const val HEALTH_TIMEOUT_MS = 30_000L
-    private const val HEALTH_INTERVAL_MS = 500L
+    // Локальный сервер поднимается за секунды; опрос раз в 500 мс добавлял
+    // до половины секунды к и без того заметному старту.
+    private const val HEALTH_INTERVAL_MS = 150L
     private const val LOG_MAX_BYTES = 2L * 1024 * 1024
 
     private val _status = MutableStateFlow(EmbeddedStatus())
@@ -90,6 +93,15 @@ object EmbeddedServer {
      * Если общий каталог недоступен (нет «Доступа ко всем файлам»), сервер
      * всё равно должен запуститься — уходим во внутреннюю папку.
      */
+    /** Фазы старта сервера в журнале: по ним видно, что именно тормозит. */
+    private fun markStart(t0: Long, name: String) {
+        DebugLog.event(
+            "startup",
+            name,
+            mapOf("ms" to (SystemClock.elapsedRealtime() - t0).toString()),
+        )
+    }
+
     private fun pickWorkspace(root: File, requested: File): File {
         // Недостаточно проверить isDirectory: после отзыва «Доступа ко всем
         // файлам» каталог остаётся, но запись в него уже запрещена. Тогда
@@ -108,8 +120,10 @@ object EmbeddedServer {
     }
 
     private fun runStart(context: Context, workspace: File, gen: Int) {
+        val t0 = SystemClock.elapsedRealtime()
         val root = File(context.filesDir, "opencode")
         val actualWorkspace = pickWorkspace(root, workspace)
+        markStart(t0, "workspace")
         val paths = ServerPaths.forContext(context, actualWorkspace)
         try {
             listOf(
@@ -120,6 +134,7 @@ object EmbeddedServer {
             fail(gen, "Не удалось создать каталоги: ${t.message}")
             return
         }
+        markStart(t0, "dirs")
         synchronized(lock) {
             if (gen == generation) {
                 _status.value = _status.value.copy(workspace = actualWorkspace.absolutePath)
@@ -129,12 +144,14 @@ object EmbeddedServer {
         // Скилы из assets должны оказаться в конфиге до старта процесса,
         // иначе первый /api/skill не увидит встроенный набор.
         runCatching { SkillSeeder.seed(context, paths) }
+        markStart(t0, "skills")
 
         // ripgrep для grep/glob: symlink в app-owned каталоге на ELF из
         // nativeLibraryDir (exec из app-data запрещён начиная с API 29).
         val tools = runCatching { Toolchain.ensure(context, paths) }.getOrElse {
             Toolchain.Status(Toolchain.toolsDir(paths), error = it.message ?: it.toString())
         }
+        markStart(t0, "tools")
         DebugLog.event(
             "toolchain",
             if (tools.ok) "rg ready" else "rg unavailable",
@@ -165,6 +182,7 @@ object EmbeddedServer {
                 )
             }
             .onFailure { DebugLog.error("environment", it) }
+        markStart(t0, "env")
 
         val nativeDir = File(context.applicationInfo.nativeLibraryDir)
         val bin = File(nativeDir, "libocserver.so")
@@ -203,6 +221,7 @@ object EmbeddedServer {
                 }
                 process = started
             }
+            markStart(t0, "spawn")
 
             val capturing = started
             thread(name = "embedded-server-reader") {
@@ -237,7 +256,7 @@ object EmbeddedServer {
                 }
             }
 
-            waitForHealth(capturing, port, passwordRef, gen, file)
+            waitForHealth(capturing, port, passwordRef, gen, file, t0)
         } catch (t: Throwable) {
             destroy(proc)
             fail(gen, "Не удалось запустить сервер: ${t.message}")
@@ -250,6 +269,7 @@ object EmbeddedServer {
         passwordRef: Array<String>,
         gen: Int,
         file: File,
+        t0: Long,
     ) {
         val deadline = System.currentTimeMillis() + HEALTH_TIMEOUT_MS
         var lastCode = -1
@@ -275,6 +295,7 @@ object EmbeddedServer {
                         version = version,
                     )
                 }
+                markStart(t0, "ready")
                 DebugLog.event("server", "running", mapOf("port" to port.toString(), "version" to version))
                 return
             }

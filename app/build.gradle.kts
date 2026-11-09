@@ -12,8 +12,8 @@ android {
         applicationId = "com.pocket.opencode"
         minSdk = 26
         targetSdk = 35
-        versionCode = 17
-        versionName = "0.6.10"
+        versionCode = 18
+        versionName = "0.6.11"
 
         // Helio G85 / TECNO LE7n и остальные целевые телефоны — arm64.
         // Остальные ABI не нужны: встроенные rg/pocket-rs собраны только
@@ -22,6 +22,18 @@ android {
     }
 
     buildFeatures { compose = true }
+
+    buildTypes {
+        release {
+            // Debug-сборка заметно медленнее на старте и больше по размеру.
+            // Подписываем тем же debug-ключом, что и раньше, чтобы обновление
+            // ставилось поверх без удаления данных.
+            isMinifyEnabled = true
+            isShrinkResources = true
+            signingConfig = signingConfigs.getByName("debug")
+            proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"))
+        }
+    }
 
     testOptions { unitTests.isReturnDefaultValues = true }
 

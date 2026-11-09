@@ -63,12 +63,36 @@ object Toolchain {
             null
         }
 
+        // Самопроверка `rg --version` занимает больше секунды на холодном
+        // старте: динамическая линковка большого Rust-бинарника. Результат
+        // зависит только от файлов APK, поэтому кэшируем его до обновления.
+        val marker = File(dir, ".rg-ok")
+        val signature = signature(source, pcre)
+        cachedVersion(marker, signature, link)?.let { version ->
+            return Status(dir, link, version, "", pocketRust)
+        }
+
         val test = selfTest(link, nativeDir)
         return if (test.first == 0) {
-            Status(dir, link, test.second.trim(), "", pocketRust)
+            val version = test.second.trim()
+            runCatching { marker.writeText(signature + "\n" + version) }
+            Status(dir, link, version, "", pocketRust)
         } else {
+            runCatching { marker.delete() }
             Status(dir, link, "", test.second.trim().ifBlank { "rg завершился с кодом ${test.first}" }, pocketRust)
         }
+    }
+
+    private fun signature(source: File, pcre: File): String =
+        "${source.absolutePath}:${source.length()}:${source.lastModified()}:" +
+            "${pcre.length()}:${pcre.lastModified()}"
+
+    private fun cachedVersion(marker: File, signature: String, link: File): String? {
+        if (!link.exists()) return null
+        val text = runCatching { marker.readText() }.getOrNull() ?: return null
+        val first = text.substringBefore('\n')
+        if (first != signature) return null
+        return text.substringAfter('\n', "").trim().ifBlank { null }
     }
 
     /** PATH для сервера: сначала наш `rg`, затем системные утилиты. */

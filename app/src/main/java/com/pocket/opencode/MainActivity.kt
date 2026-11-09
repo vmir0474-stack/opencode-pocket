@@ -297,7 +297,10 @@ private fun TabContent(
     HorizontalPager(
         state = pagerState,
         modifier = modifier.fillMaxSize(),
-        beyondViewportPageCount = 1,
+        // Не составлять соседнюю вкладку до первого свайпа: на старте это
+        // лишняя работа (Чат + Проект), а нужная страница всё равно
+        // составляется в начале жеста.
+        beyondViewportPageCount = 0,
         flingBehavior = PagerDefaults.flingBehavior(
             state = pagerState,
             pagerSnapDistance = PagerSnapDistance.atMost(1)

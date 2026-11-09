@@ -56,19 +56,44 @@ object RustTools {
             }
             if (!linked) return null
 
+            // Запуск `pocket-rs version` на холодном старте стоит ~150 мс.
+            // Файл меняется только с обновлением APK, поэтому кэшируем
+            // успешную проверку и пропускаем запуск.
+            val marker = File(dir, ".pocket-rs-ok")
+            val signature = "${source.absolutePath}:${source.length()}:${source.lastModified()}"
+            if (link.canExecute()) {
+                val cached = runCatching { marker.readText() }.getOrNull()
+                if (cached != null && cached.substringBefore('\n') == signature) {
+                    binary = link
+                    DebugLog.event(
+                        "rust",
+                        "pocket-rs ready",
+                        mapOf(
+                            "path" to link.absolutePath,
+                            "version" to cached.substringAfter('\n', "").trim().take(80),
+                            "cached" to "true",
+                        ),
+                    )
+                    return link
+                }
+            }
+
             val probe = rawExec(link, listOf("version"), null, 4_000)
             if (probe != null && probe.contains("pocket-rs")) {
                 binary = link
+                val version = probe.lineSequence().first().take(80)
+                runCatching { marker.writeText(signature + "\n" + version) }
                 DebugLog.event(
                     "rust",
                     "pocket-rs ready",
                     mapOf(
                         "path" to link.absolutePath,
-                        "version" to probe.lineSequence().first().take(80),
+                        "version" to version,
                     ),
                 )
                 return link
             }
+            runCatching { marker.delete() }
             DebugLog.event("rust", "pocket-rs self-test failed")
             return null
         }

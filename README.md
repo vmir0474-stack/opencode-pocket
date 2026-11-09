@@ -7,7 +7,7 @@ Android-клиент со **встроенным настоящим сервер
 сессии, скилы и ключи.
 
 - Пакет: `com.pocket.opencode`
-- Версия: `0.6.10` (`versionCode 17`)
+- Версия: `0.6.11` (`versionCode 18`)
 - Минимальная Android: 8.0 (API 26), target 35
 - ABI: только `arm64-v8a`
 - Сервер: `2.1.4-beta.4b83402a`
@@ -16,6 +16,10 @@ Android-клиент со **встроенным настоящим сервер
 
 - Встроенный сервер OpenCode в foreground-сервисе: уведомление «OpenCode
   работает · порт …», кнопка «Стоп», сервер переживает свайп из recents.
+- Release-сборка с R8: APK около 69 МБ, холодный старт UI ~0.4–0.6 с,
+  встроенный сервер готов ~2.5 с (замеры на Mi 9T). Повторные self-test
+  `rg`/`pocket-rs` и обход 651 файла скилов кэшируются до обновления APK,
+  а соседняя вкладка не составляется до первого свайпа.
 - Автоподключение UI к случайному порту и паролю, который сервер печатает
   при старте. Пароль нигде не сохраняется во встроенном режиме.
 - Внешний режим для отладки: адрес и пароль задаются вручную.
@@ -200,17 +204,21 @@ curl -X POST -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/jso
 
 ```bash
 # локально (нужен Android SDK 35 и JDK 17)
-./gradlew assembleDebug
+./gradlew assembleRelease
 
 # или удалённо, если настроен POCKET_HOST/POCKET_PASS
 bash scripts/remote.sh sync
 bash scripts/remote.sh test '*'
-bash scripts/remote.sh build
+bash scripts/remote.sh build          # debug, для отладки
+# release: assembleRelease на сборочной машине
 ```
 
-APK: `app/build/outputs/apk/debug/app-debug.apk`, около 93 МБ —
-внутри бинарник сервера `lib/arm64-v8a/libocserver.so`, `librg.so`,
-`libpcre2-8.so` и 42 каталога скилов.
+Release APK: `app/build/outputs/apk/release/app-release.apk`, около 69 МБ.
+Debug APK: `app/build/outputs/apk/debug/app-debug.apk`, около 91 МБ.
+Внутри — бинарник сервера `lib/arm64-v8a/libocserver.so`, `librg.so`,
+`libpcre2-8.so` и 42 каталога скилов. Release подписан тем же ключом, что
+и прежние сборки, поэтому ставится поверх без удаления данных; `run-as`
+работает только на debug-сборке.
 
 ## Ограничения
 
