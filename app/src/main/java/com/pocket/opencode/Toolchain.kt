@@ -54,6 +54,13 @@ object Toolchain {
         runCatching { linkTo(link, source) }
             .onFailure { return Status(dir, error = "symlink: ${it.message}") }
 
+        // Агент ставит скилы одной командой, а не угадывает пути и curl.
+        runCatching {
+            val script = File(dir, "pocket-skill")
+            script.writeText(skillScript(File(context.filesDir, "opencode/debug/token")))
+            script.setExecutable(true, false)
+        }.onFailure { DebugLog.error("tools", it) }
+
         // Нативный Rust-инструмент: find/diff/highlight для чата.
         val rustSource = File(nativeDir, "libpocket_rs.so")
         val rustLink = File(dir, "pocket-rs")
@@ -99,6 +106,110 @@ object Toolchain {
     fun path(status: Status): String {
         val prefix = status.dir.absolutePath
         return "$prefix:/system/bin:/system/xbin"
+    }
+
+    /**
+     * Обёртка `pocket-skill` над локальным мостом. Порт моста может
+     * сместиться (4097–4100), поэтому скрипт сам находит живой `/health`.
+     * Токен читается из приватного файла приложения, как и у остальных
+     * инструментов.
+     */
+    internal fun skillScript(tokenFile: File): String {
+        val token = tokenFile.absolutePath
+        val script = """
+            #!/system/bin/sh
+            # pocket-skill — поиск и установка скилов OpenCode Pocket.
+            # Файл создаётся приложением; не редактируй вручную.
+            TOKEN_FILE='$token'
+            BASE=''
+            if [ -r '$token' ]; then
+              TOKEN=~(cat '$token')
+              for P in 4097 4098 4099 4100; do
+                if curl -fsS --max-time 2 -H "Authorization: Bearer ~TOKEN" \
+                  "http://127.0.0.1:~P/health" >/dev/null 2>&1; then
+                  BASE="http://127.0.0.1:~P"
+                  break
+                fi
+              done
+            fi
+            if [ -z "~BASE" ]; then
+              echo '{"error":"мост OpenCode Pocket недоступен: открой приложение и запусти сервер"}' >&2
+              exit 1
+            fi
+
+            json_escape() {
+              printf '%s' "~1" | sed 's/\\/\\\\/g; s/"/\\"/g'
+            }
+
+            call() {
+              curl -sS --max-time 300 -H "Authorization: Bearer ~TOKEN" \
+                -H 'Content-Type: application/json' -X POST "~BASE/action" -d "~1"
+              echo
+            }
+
+            usage() {
+              echo "usage: pocket-skill search ЗАПРОС" >&2
+              echo "       pocket-skill install ИСТОЧНИК [--project] [--overwrite]" >&2
+              echo "       pocket-skill update [ИМЯ|--all]" >&2
+              echo "       pocket-skill remove ИМЯ" >&2
+              echo "       pocket-skill list" >&2
+            }
+
+            CMD="~{1:-}"
+            if [ -n "~CMD" ]; then shift; fi
+
+            case "~CMD" in
+              search)
+                if [ ~# -lt 1 ]; then usage; exit 2; fi
+                call "{\"name\":\"skill-search\",\"query\":\"~(json_escape "~*")\"}"
+                ;;
+              install)
+                SOURCE=''
+                PROJECT=false
+                OVERWRITE=false
+                for arg in "~@"; do
+                  case "~arg" in
+                    --project) PROJECT=true ;;
+                    --overwrite) OVERWRITE=true ;;
+                    -*) echo "pocket-skill: неизвестный флаг ~arg" >&2; exit 2 ;;
+                    *) SOURCE="~arg" ;;
+                  esac
+                done
+                if [ -z "~SOURCE" ]; then usage; exit 2; fi
+                call "{\"name\":\"skill-install\",\"source\":\"~(json_escape "~SOURCE")\",\"project\":~PROJECT,\"overwrite\":~OVERWRITE}"
+                ;;
+              update)
+                NAME=''
+                ALL=false
+                for arg in "~@"; do
+                  case "~arg" in
+                    --all) ALL=true ;;
+                    -*) echo "pocket-skill: неизвестный флаг ~arg" >&2; exit 2 ;;
+                    *) NAME="~arg" ;;
+                  esac
+                done
+                if [ "~ALL" = true ]; then
+                  call '{"name":"skill-update","all":true}'
+                elif [ -n "~NAME" ]; then
+                  call "{\"name\":\"skill-update\",\"name\":\"~(json_escape "~NAME")\",\"all\":false}"
+                else
+                  call '{"name":"skill-update","all":true}'
+                fi
+                ;;
+              remove)
+                if [ ~# -lt 1 ]; then usage; exit 2; fi
+                call "{\"name\":\"skill-remove\",\"name\":\"~(json_escape "~1")\"}"
+                ;;
+              list)
+                call '{"name":"skill-list"}'
+                ;;
+              *)
+                usage
+                exit 2
+                ;;
+            esac
+        """.trimIndent()
+        return script.replace("~", "$").plus("\n")
     }
 
     private fun linkTo(link: File, target: File) {

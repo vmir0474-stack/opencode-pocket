@@ -63,7 +63,7 @@ object Environment {
         // Сеть и архивы.
         "curl", "wget", "tar", "unzip", "gzip", "zip", "ping",
         // Поиск и текст.
-        "sed", "awk", "grep", "find", "xargs", "rg", "pocket-rs", "diff",
+        "sed", "awk", "grep", "find", "xargs", "rg", "pocket-rs", "pocket-skill", "diff",
         // Инструменты разработки: на rootless-телефоне их обычно нет.
         "git", "node", "npm", "npx", "python", "python3", "pip", "pip3",
         "jq", "bash", "make", "gcc", "clang", "cc", "sqlite3", "openssl",
@@ -221,6 +221,18 @@ object Environment {
                 "- Встроенные инструменты: ${builtins.joinToString(" и ") { "`$it`" }} уже в PATH."
             }
         )
+        val skillCli = "pocket-skill" in report.availableNames
+        appendLine()
+        appendLine("## Скилы")
+        if (skillCli) {
+            appendLine("- Скил OpenCode — каталог с `SKILL.md`. Сервер читает их из `~/.config/opencode/skills` и `<workspace>/.opencode/skills`; других каталогов не создавай.")
+            appendLine("- `pocket-skill search ЗАПРОС` ищет в skills.sh и GitHub. `pocket-skill install ИСТОЧНИК` ставит найденное, `pocket-skill update --all` обновляет установленное, `pocket-skill list` показывает список, `pocket-skill remove ИМЯ` удаляет.")
+            appendLine("- Источник: `owner/repo`, `owner/repo@skill`, ссылка GitHub на каталог/`SKILL.md` или прямой raw-URL. Флаг `--project` ставит скил в рабочий каталог вместо глобального.")
+            appendLine("- Перед установкой назови источник и описание. Если пользователь уже попросил «найди и установи», ставь сразу; иначе сначала покажи найденное и дождись ответа.")
+            appendLine("- Не запускай скрипты из чужого скила и не добавляй `--overwrite` без подтверждения. После установки `pocket-skill` сам делает reload; скил, добавленный вручную, подхватится только после reload или перезапуска сервера.")
+        } else {
+            appendLine("- `pocket-skill` не найден в PATH. Скилы можно ставить вручную в `~/.config/opencode/skills/<name>/SKILL.md` и затем вызывать reload.")
+        }
         appendLine()
         appendLine("## Замены отсутствующих команд")
         appendLine("- `zip` → `tar -czf архив.tar.gz каталог` или `tar -cf архив.tar файлы`.")

@@ -18,6 +18,7 @@ import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeout
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
@@ -34,6 +35,7 @@ class PocketViewModel(application: Application) : AndroidViewModel(application) 
     private val api = OpenCodeApi()
     private val settings = SettingsStore(application)
     private val cache = SessionCache(application)
+    private val skillInstaller = SkillInstaller()
 
     var tab by mutableIntStateOf(settings.tab)
     var baseUrl by mutableStateOf(settings.baseUrl)
@@ -327,6 +329,111 @@ class PocketViewModel(application: Application) : AndroidViewModel(application) 
                 JSONObject().put("ok", true).put("action", name)
             }
 
+            "skill-search" -> {
+                val query = args.optString("query").ifBlank { args.optString("q") }.trim()
+                if (query.isBlank()) {
+                    JSONObject().put("error", "query is required")
+                } else {
+                    runCatching {
+                        runBlocking(Dispatchers.IO) {
+                            withTimeout(60_000) { skillInstaller.search(query) }
+                        }
+                    }.fold(
+                        { found ->
+                            val array = JSONArray()
+                            for (item in found) {
+                                array.put(
+                                    JSONObject()
+                                        .put("id", item.id)
+                                        .put("name", item.name)
+                                        .put("source", item.source)
+                                        .put("installs", item.installs)
+                                )
+                            }
+                            JSONObject().put("ok", true).put("data", array)
+                        },
+                        { JSONObject().put("error", it.message ?: "search failed") },
+                    )
+                }
+            }
+
+            "skill-install" -> {
+                val source = args.optString("source").ifBlank { args.optString("url") }.trim()
+                if (source.isBlank()) {
+                    JSONObject().put("error", "source is required")
+                } else {
+                    runCatching {
+                        runBlocking(Dispatchers.IO) {
+                            withTimeout(180_000) {
+                                skillInstaller.install(
+                                    source = source,
+                                    paths = serverPaths(),
+                                    project = args.optBoolean("project", false),
+                                    overwrite = args.optBoolean("overwrite", false),
+                                )
+                            }
+                        }
+                    }.fold(
+                        { installed ->
+                            reloadSkillsAfterChange()
+                            JSONObject()
+                                .put("ok", true)
+                                .put("installed", installedSkillsJson(installed))
+                                .put("reloaded", true)
+                        },
+                        { JSONObject().put("error", it.message ?: "install failed") },
+                    )
+                }
+            }
+
+            "skill-update" -> {
+                val name = args.optString("name").trim().ifBlank { null }
+                val all = args.optBoolean("all", name == null)
+                runCatching {
+                    runBlocking(Dispatchers.IO) {
+                        withTimeout(240_000) {
+                            skillInstaller.update(serverPaths(), name, all)
+                        }
+                    }
+                }.fold(
+                    { updated ->
+                        reloadSkillsAfterChange()
+                        JSONObject()
+                            .put("ok", true)
+                            .put("updated", installedSkillsJson(updated))
+                            .put("reloaded", true)
+                    },
+                    { JSONObject().put("error", it.message ?: "update failed") },
+                )
+            }
+
+            "skill-remove" -> {
+                val name = args.optString("name").trim()
+                if (name.isBlank()) {
+                    JSONObject().put("error", "name is required")
+                } else {
+                    runCatching { skillInstaller.remove(serverPaths(), name) }.fold(
+                        { removed ->
+                            if (removed) reloadSkillsAfterChange()
+                            JSONObject()
+                                .put("ok", true)
+                                .put("removed", removed)
+                                .put("reloaded", removed)
+                        },
+                        { JSONObject().put("error", it.message ?: "remove failed") },
+                    )
+                }
+            }
+
+            "skill-list" -> {
+                val paths = serverPaths()
+                JSONObject()
+                    .put("ok", true)
+                    .put("globalRoot", File(paths.config, "opencode/skills").absolutePath)
+                    .put("projectRoot", File(paths.workspace, ".opencode/skills").absolutePath)
+                    .put("installed", installedSkillsJson(skillInstaller.list(paths)))
+            }
+
             "mcp" -> {
                 loadMcp()
                 JSONObject().put("ok", true).put("action", name)
@@ -438,6 +545,30 @@ class PocketViewModel(application: Application) : AndroidViewModel(application) 
 
             else -> JSONObject().put("error", "unknown action: $name")
         }
+    }
+
+    private fun installedSkillsJson(items: List<InstalledSkill>): JSONArray {
+        val array = JSONArray()
+        for (item in items) {
+            array.put(
+                JSONObject()
+                    .put("name", item.name)
+                    .put("path", item.path)
+                    .put("source", item.source)
+                    .put("files", item.files)
+            )
+        }
+        return array
+    }
+
+    /** OpenCode читает скилы при старте и после reload, иначе новый не виден. */
+    private fun reloadSkillsAfterChange() {
+        runCatching {
+            runBlocking(Dispatchers.IO) {
+                withTimeout(20_000) { api.reload(baseUrl, password) }
+            }
+        }.onFailure { DebugLog.error("skills", it) }
+        loadSkills()
     }
 
     fun setMode(mode: ServerMode) {
