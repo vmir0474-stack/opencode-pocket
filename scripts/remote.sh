@@ -39,7 +39,11 @@ case "${1:-}" in
   release)
     "${SSH[@]}" "$remote_env; cd /root/pocket && ./gradlew assembleRelease --no-daemon --console=plain"
     "${SCP[@]}" "$HOST:/root/pocket/app/build/outputs/apk/release/app-release.apk" "$HOME/tmp/pocket-release.apk"
-    ls -lh "$HOME/tmp/pocket-release.apk"
+    code=$(sed -n 's/.*versionCode = \([0-9][0-9]*\).*/\1/p' app/build.gradle.kts | head -1)
+    name=$(sed -n 's/.*versionName = "\([^"]*\)".*/\1/p' app/build.gradle.kts | head -1)
+    printf '{"versionCode":%s,"versionName":"%s"}\n' "$code" "$name" > "$HOME/tmp/version.json"
+    ls -lh "$HOME/tmp/pocket-release.apk" "$HOME/tmp/version.json"
+    cat "$HOME/tmp/version.json"
     ;;
   *) echo "usage: $0 sync|test <Class>|build|release" >&2; exit 2 ;;
 esac

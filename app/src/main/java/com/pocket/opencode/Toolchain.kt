@@ -191,14 +191,14 @@ object Toolchain {
                 if [ "~ALL" = true ]; then
                   call '{"name":"skill-update","all":true}'
                 elif [ -n "~NAME" ]; then
-                  call "{\"name\":\"skill-update\",\"name\":\"~(json_escape "~NAME")\",\"all\":false}"
+                  call "{\"name\":\"skill-update\",\"skill\":\"~(json_escape "~NAME")\",\"all\":false}"
                 else
                   call '{"name":"skill-update","all":true}'
                 fi
                 ;;
               remove)
                 if [ ~# -lt 1 ]; then usage; exit 2; fi
-                call "{\"name\":\"skill-remove\",\"name\":\"~(json_escape "~1")\"}"
+                call "{\"name\":\"skill-remove\",\"skill\":\"~(json_escape "~1")\"}"
                 ;;
               list)
                 call '{"name":"skill-list"}'

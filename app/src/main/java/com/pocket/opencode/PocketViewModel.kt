@@ -400,7 +400,7 @@ class PocketViewModel(application: Application) : AndroidViewModel(application) 
             }
 
             "skill-update" -> {
-                val name = args.optString("name").trim().ifBlank { null }
+                val name = args.optString("skill").trim().ifBlank { null }
                 val all = args.optBoolean("all", name == null)
                 runCatching {
                     runBlocking(Dispatchers.IO) {
@@ -421,7 +421,7 @@ class PocketViewModel(application: Application) : AndroidViewModel(application) 
             }
 
             "skill-remove" -> {
-                val name = args.optString("name").trim()
+                val name = args.optString("skill").trim()
                 if (name.isBlank()) {
                     JSONObject().put("error", "name is required")
                 } else {
