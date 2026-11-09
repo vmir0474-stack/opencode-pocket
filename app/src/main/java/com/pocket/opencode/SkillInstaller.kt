@@ -206,7 +206,7 @@ class SkillInstaller(
         val root = skillsRoot(paths, project)
         root.mkdirs()
         return when (parsed) {
-            is SkillSource.Raw -> installRaw(parsed, root, overwrite)
+            is SkillSource.Raw -> installRaw(parsed, root, overwrite, project)
             is SkillSource.SkillsSh ->
                 installRepo(
                     parsed.owner, parsed.repo, null, parsed.skill,
@@ -225,6 +225,7 @@ class SkillInstaller(
         source: SkillSource.Raw,
         root: File,
         overwrite: Boolean,
+        project: Boolean,
     ): List<InstalledSkill> {
         val text = String(fetcher.bytes(source.url, MAX_RAW), Charsets.UTF_8)
         val meta = SkillFrontmatter.parse(text) ?: error("В SKILL.md нет name и description")
@@ -237,7 +238,7 @@ class SkillInstaller(
             temp.mkdirs()
             File(temp, "SKILL.md").writeText(text)
             copySkill(temp, dest, overwrite)
-            writeProvenance(dest, source.url, null, null, false, 1)
+            writeProvenance(dest, source.url, null, null, project, 1)
             return listOf(
                 InstalledSkill(meta.name, File(dest, "SKILL.md").absolutePath, source.url, 1)
             )

@@ -6,6 +6,7 @@ import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageInstaller
 import android.net.Uri
+import android.os.Build
 import android.provider.Settings
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -116,7 +117,8 @@ object UpdateInstaller {
                 }
                 val callback = Intent(context, UpdateInstallReceiver::class.java)
                     .putExtra(EXTRA_SESSION_ID, sessionId)
-                val flags = PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_MUTABLE
+                val flags = PendingIntent.FLAG_UPDATE_CURRENT or
+                    if (Build.VERSION.SDK_INT >= 31) PendingIntent.FLAG_MUTABLE else 0
                 val pending = PendingIntent.getBroadcast(context, sessionId, callback, flags)
                 session.commit(pending.intentSender)
             }
