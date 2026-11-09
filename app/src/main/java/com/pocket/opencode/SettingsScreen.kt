@@ -18,6 +18,7 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
@@ -231,6 +232,68 @@ fun SettingsScreen(vm: PocketViewModel) {
                 fontSize = 10.5.sp,
                 lineHeight = 15.sp
             )
+            }
+        }
+
+        Panel {
+            SectionTitle("Обновления")
+            Spacer(Modifier.height(8.dp))
+            KeyValueRow("Версия", "${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE})")
+            if (vm.updateStatus.isNotBlank()) {
+                Spacer(Modifier.height(6.dp))
+                Text(vm.updateStatus, color = Mint, fontSize = 11.5.sp)
+            }
+            if (vm.updateError.isNotBlank()) {
+                Spacer(Modifier.height(6.dp))
+                Text(vm.updateError, color = Danger, fontSize = 11.sp, lineHeight = 16.sp)
+            }
+            val info = vm.updateInfo
+            if (info != null) {
+                Spacer(Modifier.height(6.dp))
+                KeyValueRow("Доступно", info.versionName)
+                Text(
+                    "${info.size / 1024 / 1024} МБ · GitHub",
+                    color = Dim,
+                    fontSize = 10.5.sp
+                )
+                if (vm.updateBusy) {
+                    Spacer(Modifier.height(8.dp))
+                    LinearProgressIndicator(
+                        progress = { vm.updateProgress },
+                        modifier = Modifier.fillMaxWidth(),
+                        color = Accent,
+                        trackColor = Line
+                    )
+                }
+                Spacer(Modifier.height(10.dp))
+                Button(
+                    onClick = { vm.downloadAndInstallUpdate() },
+                    shape = RoundedCornerShape(13.dp),
+                    modifier = Modifier.fillMaxWidth(),
+                    enabled = !vm.updateBusy
+                ) {
+                    Text("Скачать и установить", fontSize = 11.5.sp)
+                }
+                if (vm.updateNeedsPermission) {
+                    Spacer(Modifier.height(8.dp))
+                    OutlinedButton(
+                        onClick = { vm.openInstallPermission() },
+                        shape = RoundedCornerShape(13.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text("Разрешить установку", fontSize = 11.5.sp)
+                    }
+                }
+            } else {
+                Spacer(Modifier.height(10.dp))
+                OutlinedButton(
+                    onClick = { vm.checkForUpdates(manual = true) },
+                    shape = RoundedCornerShape(13.dp),
+                    modifier = Modifier.fillMaxWidth(),
+                    enabled = !vm.updateBusy
+                ) {
+                    Text(if (vm.updateBusy) "Проверяю…" else "Проверить обновления", fontSize = 11.5.sp)
+                }
             }
         }
 

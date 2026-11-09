@@ -36,6 +36,7 @@ class PocketViewModel(application: Application) : AndroidViewModel(application) 
     private val settings = SettingsStore(application)
     private val cache = SessionCache(application)
     private val skillInstaller = SkillInstaller()
+    private val updateStore = UpdateStore(application)
 
     var tab by mutableIntStateOf(settings.tab)
     var baseUrl by mutableStateOf(settings.baseUrl)
@@ -99,6 +100,9 @@ class PocketViewModel(application: Application) : AndroidViewModel(application) 
     var skillBusy by mutableStateOf(false)
     var skillError by mutableStateOf("")
     var skillStatus by mutableStateOf("")
+    var skillInstallBusy by mutableStateOf(false)
+    var skillInstallStatus by mutableStateOf("")
+    var skillInstallError by mutableStateOf("")
 
     var mcpServers by mutableStateOf<List<McpInfo>>(emptyList())
     var mcpBusy by mutableStateOf(false)
@@ -111,6 +115,14 @@ class PocketViewModel(application: Application) : AndroidViewModel(application) 
 
     var environment by mutableStateOf<EnvReport?>(null)
     var environmentBusy by mutableStateOf(false)
+
+    var updateInfo by mutableStateOf<UpdateInfo?>(null)
+    var updateDialog by mutableStateOf(false)
+    var updateBusy by mutableStateOf(false)
+    var updateProgress by mutableStateOf(0f)
+    var updateError by mutableStateOf("")
+    var updateStatus by mutableStateOf("")
+    var updateNeedsPermission by mutableStateOf(false)
 
     var migrationPath by mutableStateOf("/sdcard/OpenCode/import/opencode-backup.tar.gz")
     var migrationPreview by mutableStateOf<MigrationPreview?>(null)
@@ -200,6 +212,7 @@ class PocketViewModel(application: Application) : AndroidViewModel(application) 
             EmbeddedServer.status.collect { onEmbeddedStatus(it) }
         }
         refreshWorkspaceAccess()
+        checkForUpdates(manual = false)
         if (settings.mode == ServerMode.EXTERNAL) {
             if (settings.baseUrl.isNotBlank()) connect()
         }
@@ -562,13 +575,15 @@ class PocketViewModel(application: Application) : AndroidViewModel(application) 
     }
 
     /** OpenCode читает скилы при старте и после reload, иначе новый не виден. */
-    private fun reloadSkillsAfterChange() {
-        runCatching {
-            runBlocking(Dispatchers.IO) {
-                withTimeout(20_000) { api.reload(baseUrl, password) }
-            }
-        }.onFailure { DebugLog.error("skills", it) }
+    private suspend fun reloadSkillsNow() {
+        runCatching { withTimeout(20_000) { api.reload(baseUrl, password) } }
+            .onFailure { DebugLog.error("skills", it) }
         loadSkills()
+    }
+
+    /** Для моста: обработчик действия не suspend и ждёт результат. */
+    private fun reloadSkillsAfterChange() {
+        runBlocking(Dispatchers.IO) { reloadSkillsNow() }
     }
 
     fun setMode(mode: ServerMode) {
@@ -1230,6 +1245,137 @@ class PocketViewModel(application: Application) : AndroidViewModel(application) 
                 .onSuccess { skills = it }
                 .onFailure { skillError = "Скилы: ${it.message}" }
             skillBusy = false
+        }
+    }
+
+    /** Установка скила по ссылке из UI: тот же код, что у агента и моста. */
+    fun installSkill(source: String, project: Boolean, overwrite: Boolean) {
+        val clean = source.trim()
+        if (clean.isBlank() || skillInstallBusy) return
+        viewModelScope.launch {
+            skillInstallBusy = true
+            skillInstallStatus = ""
+            skillInstallError = ""
+            runCatching {
+                withContext(Dispatchers.IO) {
+                    withTimeout(180_000) {
+                        skillInstaller.install(
+                            source = clean,
+                            paths = serverPaths(),
+                            project = project,
+                            overwrite = overwrite,
+                        )
+                    }
+                }
+            }.fold(
+                { installed ->
+                    skillInstallStatus = "Установлено: " +
+                        installed.joinToString(", ") { it.name }
+                    reloadSkillsNow()
+                },
+                { skillInstallError = it.message ?: "Не удалось установить скил" },
+            )
+            skillInstallBusy = false
+        }
+    }
+
+    fun checkForUpdates(manual: Boolean = false) {
+        if (updateBusy) return
+        if (!manual && !updateStore.shouldCheck()) return
+        viewModelScope.launch {
+            updateBusy = true
+            updateError = ""
+            if (manual) updateStatus = "Проверяю…"
+            runCatching {
+                UpdateChecker.latest(BuildConfig.VERSION_NAME, BuildConfig.VERSION_CODE)
+            }.onSuccess { info ->
+                updateStore.markChecked()
+                updateInfo = info
+                updateStatus = when {
+                    info == null -> "Обновлений нет"
+                    else -> "Доступно ${info.versionName}"
+                }
+                updateDialog = info != null && info.tag != updateStore.skippedTag
+            }.onFailure {
+                updateStore.markChecked()
+                updateError = "Обновления: ${it.message}"
+                if (manual) updateStatus = ""
+            }
+            updateBusy = false
+        }
+    }
+
+    fun downloadAndInstallUpdate() {
+        val info = updateInfo ?: return
+        if (updateBusy) return
+        val app = getApplication<Application>()
+        if (!UpdateInstaller.canInstall(app)) {
+            updateNeedsPermission = true
+            updateError = "Разреши установку неизвестных приложений для OpenCode Pocket"
+            return
+        }
+        updateNeedsPermission = false
+        viewModelScope.launch {
+            updateBusy = true
+            updateProgress = 0f
+            updateError = ""
+            updateStatus = "Скачиваю ${info.versionName}…"
+            runCatching {
+                withContext(Dispatchers.IO) {
+                    val dir = File(app.cacheDir, "updates")
+                    val file = UpdateInstaller.download(
+                        info,
+                        File(dir, UpdateInstaller.apkFileName(info)),
+                    ) { done, total ->
+                        if (total > 0) {
+                            updateProgress = (done.toFloat() / total).coerceIn(0f, 1f)
+                        }
+                    }
+                    UpdateInstaller.install(app, file)
+                }
+            }.onSuccess {
+                updateStatus = "Готово: подтверди установку в системном окне"
+                updateDialog = false
+            }.onFailure {
+                updateError = "Обновление: ${it.message}"
+                updateStatus = ""
+            }
+            updateBusy = false
+        }
+    }
+
+    fun openInstallPermission() {
+        val app = getApplication<Application>()
+        runCatching { app.startActivity(UpdateInstaller.permissionIntent(app)) }
+            .onFailure { updateError = "Не удалось открыть настройки: ${it.message}" }
+    }
+
+    fun dismissUpdate() {
+        updateInfo?.let { updateStore.skip(it.tag) }
+        updateDialog = false
+    }
+
+    fun updateAllSkills() {
+        if (skillInstallBusy) return
+        viewModelScope.launch {
+            skillInstallBusy = true
+            skillInstallStatus = ""
+            skillInstallError = ""
+            runCatching {
+                withContext(Dispatchers.IO) {
+                    withTimeout(240_000) {
+                        skillInstaller.update(serverPaths(), name = null, all = true)
+                    }
+                }
+            }.fold(
+                { updated ->
+                    skillInstallStatus = "Обновлено: " +
+                        updated.joinToString(", ") { it.name }
+                    reloadSkillsNow()
+                },
+                { skillInstallError = it.message ?: "Не удалось обновить скилы" },
+            )
+            skillInstallBusy = false
         }
     }
 

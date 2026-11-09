@@ -21,6 +21,7 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CheckboxDefaults
 import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.RadioButton
@@ -60,7 +61,77 @@ fun PendingDialogs(vm: PocketViewModel) {
     when {
         permission != null -> PermissionDialog(vm, permission)
         form != null -> FormDialog(vm, form)
+        vm.updateDialog && vm.updateInfo != null -> UpdateDialog(vm)
     }
+}
+
+@Composable
+private fun UpdateDialog(vm: PocketViewModel) {
+    val info = vm.updateInfo ?: return
+    AlertDialog(
+        onDismissRequest = { if (!vm.updateBusy) vm.dismissUpdate() },
+        containerColor = Card,
+        title = {
+            Text(
+                "Доступно обновление ${info.versionName}",
+                color = TextMain,
+                fontSize = 17.sp,
+                fontWeight = FontWeight.SemiBold
+            )
+        },
+        text = {
+            Column(
+                Modifier.heightIn(max = 400.dp).verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Text(
+                    "Сейчас ${BuildConfig.VERSION_NAME} · APK ${info.size / 1024 / 1024} МБ · GitHub",
+                    color = Muted,
+                    fontSize = 11.sp
+                )
+                if (info.notes.isNotBlank()) {
+                    Text(
+                        info.notes.trim().take(1500),
+                        color = Muted,
+                        fontSize = 11.sp,
+                        lineHeight = 16.sp
+                    )
+                }
+                if (vm.updateBusy) {
+                    LinearProgressIndicator(
+                        progress = { vm.updateProgress },
+                        modifier = Modifier.fillMaxWidth(),
+                        color = Accent,
+                        trackColor = Line
+                    )
+                }
+                if (vm.updateStatus.isNotBlank()) {
+                    Text(vm.updateStatus, color = Mint, fontSize = 11.5.sp)
+                }
+                if (vm.updateError.isNotBlank()) {
+                    Text(vm.updateError, color = Danger, fontSize = 11.sp, lineHeight = 16.sp)
+                }
+                if (vm.updateNeedsPermission) {
+                    TextButton(onClick = { vm.openInstallPermission() }) {
+                        Text("Разрешить установку", color = Accent, fontSize = 11.5.sp)
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(
+                onClick = { vm.downloadAndInstallUpdate() },
+                enabled = !vm.updateBusy
+            ) {
+                Text("Скачать и установить", color = Accent)
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = { vm.dismissUpdate() }, enabled = !vm.updateBusy) {
+                Text("Позже", color = Muted)
+            }
+        }
+    )
 }
 
 @Composable

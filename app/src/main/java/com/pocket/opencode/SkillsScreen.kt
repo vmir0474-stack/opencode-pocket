@@ -45,8 +45,13 @@ fun SkillsScreen(vm: PocketViewModel) {
     var search by rememberSaveable { mutableStateOf("") }
     var editing by remember { mutableStateOf<SkillInfo?>(null) }
     var creating by remember { mutableStateOf(false) }
+    var installing by remember { mutableStateOf(false) }
 
     LaunchedEffect(Unit) { vm.loadSkills() }
+
+    if (installing) {
+        InstallSkillDialog(vm) { installing = false }
+    }
 
     if (creating || editing != null) {
         SkillEditor(vm, if (creating) null else editing) {
@@ -67,15 +72,20 @@ fun SkillsScreen(vm: PocketViewModel) {
             title = "Скилы",
             subtitle = "Библиотека OpenCode · ${vm.skills.size} навыков"
         ) {
-            if (vm.skillBusy) {
+            if (vm.skillBusy || vm.skillInstallBusy) {
                 CircularProgressIndicator(
                     modifier = Modifier.size(18.dp),
                     color = Accent,
                     strokeWidth = 1.5.dp
                 )
             } else {
-                TextButton(onClick = { vm.loadSkills() }) {
-                    Text("Обновить", color = Accent, fontSize = 11.5.sp)
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    TextButton(onClick = { vm.updateAllSkills() }) {
+                        Text("Обновить все", color = Accent, fontSize = 11.5.sp)
+                    }
+                    TextButton(onClick = { vm.loadSkills() }) {
+                        Text("Обновить", color = Accent, fontSize = 11.5.sp)
+                    }
                 }
             }
         }
@@ -84,6 +94,12 @@ fun SkillsScreen(vm: PocketViewModel) {
         if (vm.skillError.isNotBlank()) {
             Text(vm.skillError, color = Danger, fontSize = 11.5.sp, lineHeight = 16.sp)
         }
+        if (vm.skillInstallStatus.isNotBlank()) {
+            Text(vm.skillInstallStatus, color = Mint, fontSize = 11.5.sp)
+        }
+        if (vm.skillInstallError.isNotBlank()) {
+            Text(vm.skillInstallError, color = Danger, fontSize = 11.5.sp, lineHeight = 16.sp)
+        }
 
         PocketSearchField(
             value = search,
@@ -91,12 +107,25 @@ fun SkillsScreen(vm: PocketViewModel) {
             placeholder = "Поиск по названию, id или описанию"
         )
 
-        Button(
-            onClick = { creating = true },
-            shape = RoundedCornerShape(13.dp),
-            modifier = Modifier.fillMaxWidth()
-        ) {
-            Text("Новый скил")
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Button(
+                onClick = { creating = true },
+                shape = RoundedCornerShape(13.dp),
+                modifier = Modifier.weight(1f)
+            ) {
+                Text("Новый скил")
+            }
+            OutlinedButton(
+                onClick = {
+                    vm.skillInstallStatus = ""
+                    vm.skillInstallError = ""
+                    installing = true
+                },
+                shape = RoundedCornerShape(13.dp),
+                modifier = Modifier.weight(1f)
+            ) {
+                Text("По ссылке")
+            }
         }
 
         Panel {
@@ -162,6 +191,83 @@ fun SkillsScreen(vm: PocketViewModel) {
             }
         }
     }
+}
+
+
+@Composable
+private fun InstallSkillDialog(vm: PocketViewModel, onClose: () -> Unit) {
+    var source by remember { mutableStateOf("") }
+    var project by remember { mutableStateOf(false) }
+    var overwrite by remember { mutableStateOf(false) }
+
+    AlertDialog(
+        onDismissRequest = { if (!vm.skillInstallBusy) onClose() },
+        containerColor = Card,
+        title = { Text("Установить скил", color = TextMain, fontSize = 16.sp) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Text(
+                    "Ссылка или owner/repo@skill. Подойдут skills.sh, GitHub и прямой SKILL.md.",
+                    color = Muted,
+                    fontSize = 11.sp,
+                    lineHeight = 16.sp
+                )
+                OutlinedTextField(
+                    value = source,
+                    onValueChange = { source = it },
+                    modifier = Modifier.fillMaxWidth(),
+                    label = { Text("Источник", color = Muted, fontSize = 11.sp) },
+                    placeholder = { Text("anthropics/skills@pdf", color = Dim, fontSize = 11.sp) },
+                    enabled = !vm.skillInstallBusy,
+                    maxLines = 3,
+                    shape = RoundedCornerShape(13.dp),
+                    colors = pocketFieldColors()
+                )
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    ChipButton(
+                        label = "В проект",
+                        accent = project,
+                        onClick = { project = !project }
+                    )
+                    ChipButton(
+                        label = "Заменить",
+                        accent = overwrite,
+                        onClick = { overwrite = !overwrite }
+                    )
+                }
+                if (vm.skillInstallBusy) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(16.dp),
+                            color = Accent,
+                            strokeWidth = 1.5.dp
+                        )
+                        Spacer(Modifier.size(8.dp))
+                        Text("Скачиваю и проверяю…", color = Muted, fontSize = 11.sp)
+                    }
+                }
+                if (vm.skillInstallStatus.isNotBlank()) {
+                    Text(vm.skillInstallStatus, color = Mint, fontSize = 11.5.sp)
+                }
+                if (vm.skillInstallError.isNotBlank()) {
+                    Text(vm.skillInstallError, color = Danger, fontSize = 11.5.sp, lineHeight = 16.sp)
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(
+                onClick = { vm.installSkill(source, project, overwrite) },
+                enabled = source.isNotBlank() && !vm.skillInstallBusy
+            ) {
+                Text("Установить", color = Accent)
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onClose, enabled = !vm.skillInstallBusy) {
+                Text("Закрыть", color = Muted)
+            }
+        }
+    )
 }
 
 @Composable

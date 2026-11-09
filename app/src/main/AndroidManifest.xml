@@ -10,6 +10,8 @@
     <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE"/>
     <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE"/>
     <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS"/>
+    <!-- Самообновление из GitHub: системный установщик пакетов. -->
+    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES"/>
     <!-- Android 13+: без этих разрешений агент видит имена файлов, но не читает их. -->
     <uses-permission android:name="android.permission.READ_MEDIA_IMAGES"/>
     <uses-permission android:name="android.permission.READ_MEDIA_VIDEO"/>
@@ -58,6 +60,9 @@
                 <data android:mimeType="*/*"/>
             </intent-filter>
         </activity>
+        <receiver
+            android:name="com.pocket.opencode.UpdateInstallReceiver"
+            android:exported="false"/>
         <service
             android:name="com.pocket.opencode.ServerService"
             android:exported="false"
