@@ -21,7 +21,7 @@ import java.util.concurrent.TimeUnit
 /**
  * Pocket Dev: proot и Linux-rootfs внутри приватного каталога приложения.
  *
- * Сборка `dev` использует targetSdk 28, поэтому Android разрешает запускать
+ * Приложение собирается с targetSdk 28, поэтому Android разрешает запускать
  * ELF из app-data. Rootfs ставится в files/dev/rootfs, proot, его
  * библиотеки и ELF-загрузчик — в files/dev/bin. Команда `dev` попадает
  * в PATH сервера.
@@ -69,7 +69,6 @@ object DevEnvironment {
      * по времени установки.
      */
     fun ensureTools(context: Context, paths: ServerPaths? = null): Boolean {
-        if (!BuildConfig.POCKET_DEV) return false
         val bin = binDir(context)
         val tools = paths?.let { File(it.root, "tools") } ?: toolsDir(context)
         val stamp = runCatching {

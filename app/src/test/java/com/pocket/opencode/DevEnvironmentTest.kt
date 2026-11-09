@@ -8,10 +8,10 @@ import java.io.File
 
 class DevEnvironmentTest {
 
-    private val bin = File("/data/user/0/com.pocket.opencode.dev/files/dev/bin")
-    private val root = File("/data/user/0/com.pocket.opencode.dev/files/dev/rootfs")
-    private val dev = File("/data/user/0/com.pocket.opencode.dev/files/dev")
-    private val workspace = File("/data/user/0/com.pocket.opencode.dev/files/workspace")
+    private val bin = File("/data/user/0/com.pocket.opencode/files/dev/bin")
+    private val root = File("/data/user/0/com.pocket.opencode/files/dev/rootfs")
+    private val dev = File("/data/user/0/com.pocket.opencode/files/dev")
+    private val workspace = File("/data/user/0/com.pocket.opencode/files/workspace")
 
     private fun script() = DevEnvironment.wrapperScript(bin, root, workspace, dev)
 
@@ -50,7 +50,7 @@ class DevEnvironmentTest {
 
     @Test
     fun `workspace falls back when external dir is unavailable`() {
-        val fallback = File("/data/user/0/com.pocket.opencode.dev/files/workspace")
+        val fallback = File("/data/user/0/com.pocket.opencode/files/workspace")
         val external = File("/sdcard/OpenCode")
         assertEquals(fallback, DevEnvironment.guestWorkspace(external, fallback))
     }
@@ -59,7 +59,7 @@ class DevEnvironmentTest {
     fun `workspace keeps readable directory`() {
         val dir = java.nio.file.Files.createTempDirectory("pocket-ws").toFile()
         try {
-            val fallback = File("/data/user/0/com.pocket.opencode.dev/files/workspace")
+            val fallback = File("/data/user/0/com.pocket.opencode/files/workspace")
             assertEquals(dir, DevEnvironment.guestWorkspace(dir, fallback))
         } finally {
             dir.delete()

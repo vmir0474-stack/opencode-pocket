@@ -11,33 +11,19 @@ android {
     defaultConfig {
         applicationId = "com.pocket.opencode"
         minSdk = 26
-        targetSdk = 35
-        versionCode = 18
-        versionName = "0.6.11"
+        // targetSdk задаётся на весь пакет, поэтому у приложения один APK.
+        // 28 нужен, чтобы Android разрешал execve() для proot и ELF из
+        // app-data: с 29 действует W^X, и Ubuntu внутри приложения не
+        // запускается. Android 14 принимает targetSdk >= 23, Android 15 —
+        // >= 24, так что 28 устанавливается и на них.
+        targetSdk = 28
+        versionCode = 19
+        versionName = "0.7.0"
 
         // Helio G85 / TECNO LE7n и остальные целевые телефоны — arm64.
         // Остальные ABI не нужны: встроенные rg/pocket-rs собраны только
         // под arm64, а stub-библиотеки только раздувают APK.
         ndk { abiFilters += "arm64-v8a" }
-    }
-
-    // Pocket Dev — отдельная сборка с proot и Linux-окружением. Ей нужен
-    // targetSdk 28: начиная с 29 Android запрещает исполнять ELF из
-    // app-data, а proot и rootfs работают именно оттуда. Обычная сборка
-    // остаётся на targetSdk 35.
-    flavorDimensions += "edition"
-    productFlavors {
-        create("standard") {
-            dimension = "edition"
-            buildConfigField("boolean", "POCKET_DEV", "false")
-        }
-        create("dev") {
-            dimension = "edition"
-            applicationId = "com.pocket.opencode.dev"
-            targetSdk = 28
-            versionNameSuffix = "-dev"
-            buildConfigField("boolean", "POCKET_DEV", "true")
-        }
     }
 
     buildFeatures {
@@ -58,6 +44,12 @@ android {
     }
 
     testOptions { unitTests.isReturnDefaultValues = true }
+
+    lint {
+        // APK распространяется через GitHub, а не Google Play. targetSdk 28
+        // выбран осознанно: он нужен для execve() в proot.
+        disable += "ExpiredTargetSdkVersion"
+    }
 
     packaging {
         jniLibs {

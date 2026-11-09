@@ -55,6 +55,8 @@ class PocketViewModel(application: Application) : AndroidViewModel(application) 
 
     var workspacePath by mutableStateOf(settings.workspacePath)
     var hasAllFilesAccess by mutableStateOf(Workspace.hasAllFilesAccess(application))
+    /** targetSdk 28: на всех версиях Android доступ к /sdcard даёт legacy-разрешение. */
+    val legacyStorage: Boolean get() = Workspace.usesLegacyStorage(getApplication())
     var workspaceUsable by mutableStateOf(false)
     var importBusy by mutableStateOf(false)
     var importMessage by mutableStateOf("")
@@ -398,7 +400,7 @@ class PocketViewModel(application: Application) : AndroidViewModel(application) 
                 val state = DevEnvironment.state.value
                 JSONObject()
                     .put("ok", true)
-                    .put("dev", BuildConfig.POCKET_DEV)
+                    .put("dev", true)
                     .put("toolsReady", state.toolsReady)
                     .put("installed", state.installed)
                     .put("busy", state.busy)
@@ -411,21 +413,13 @@ class PocketViewModel(application: Application) : AndroidViewModel(application) 
             }
 
             "dev-install" -> {
-                if (!BuildConfig.POCKET_DEV) {
-                    JSONObject().put("error", "это обычная сборка, а не Pocket Dev")
-                } else {
-                    viewModelScope.launch { DevEnvironment.install(app) }
-                    JSONObject().put("ok", true).put("action", name)
-                }
+                viewModelScope.launch { DevEnvironment.install(app) }
+                JSONObject().put("ok", true).put("action", name)
             }
 
             "dev-test" -> {
-                if (!BuildConfig.POCKET_DEV) {
-                    JSONObject().put("error", "это обычная сборка, а не Pocket Dev")
-                } else {
-                    val output = runBlocking { DevEnvironment.test(app) }
-                    JSONObject().put("ok", true).put("output", output)
-                }
+                val output = runBlocking { DevEnvironment.test(app) }
+                JSONObject().put("ok", true).put("output", output)
             }
 
             "diagnostics" -> {
@@ -605,9 +599,14 @@ class PocketViewModel(application: Application) : AndroidViewModel(application) 
     fun openAllFilesSettings(): Boolean {
         val opened = Workspace.openAllFilesSettings(getApplication())
         if (!opened) {
-            DebugLog.event("permissions", "all-files settings unavailable")
-            statusDetail = "Не удалось открыть настройки. Открой вручную: " +
-                "Настройки → Приложения → OpenCode Pocket → Специальный доступ → Доступ ко всем файлам."
+            DebugLog.event("permissions", "storage settings unavailable")
+            statusDetail = if (legacyStorage) {
+                "Не удалось открыть настройки. Открой вручную: " +
+                    "Настройки → Приложения → OpenCode Pocket → Разрешения → Память."
+            } else {
+                "Не удалось открыть настройки. Открой вручную: " +
+                    "Настройки → Приложения → OpenCode Pocket → Специальный доступ → Доступ ко всем файлам."
+            }
         }
         return opened
     }

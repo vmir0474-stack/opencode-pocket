@@ -12,25 +12,35 @@ import java.io.File
 
 /**
  * Рабочий каталог агента. По умолчанию — видимая пользователю папка на
- * общем хранилище. На Android 11+ для неё нужен «Доступ ко всем файлам»,
- * на Android 8–10 — обычное разрешение WRITE_EXTERNAL_STORAGE. Без доступа
- * сервер уходит во внутреннюю папку приложения, но продолжает работать.
+ * общем хранилище. Приложение собирается с targetSdk 28, поэтому на всех
+ * версиях Android работает legacy-режим хранилища: доступ к /sdcard даёт
+ * обычное разрешение WRITE_EXTERNAL_STORAGE. Без доступа сервер уходит во
+ * внутреннюю папку приложения, но продолжает работать.
  */
 object Workspace {
     const val DEFAULT_PATH = "/sdcard/OpenCode"
 
     fun defaultPath(): String = DEFAULT_PATH
 
+    /**
+     * Приложение с targetSdk < 30 использует legacy-хранилище даже на
+     * Android 11+. Для такого режима достаточно runtime-разрешения, а
+     * MANAGE_EXTERNAL_STORAGE не выдаётся и не нужен.
+     */
+    fun usesLegacyStorage(context: Context): Boolean =
+        context.applicationInfo.targetSdkVersion < Build.VERSION_CODES.R
+
     fun hasAllFilesAccess(context: Context): Boolean =
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+        if (usesLegacyStorage(context)) {
+            hasLegacyStorageAccess(context)
+        } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
             Environment.isExternalStorageManager()
         } else {
             hasLegacyStorageAccess(context)
         }
 
-    /** Android 8–10: WRITE_EXTERNAL_STORAGE + смонтированное хранилище. */
+    /** WRITE_EXTERNAL_STORAGE + смонтированное хранилище (API 26+). */
     fun hasLegacyStorageAccess(context: Context): Boolean {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) return false
         val granted = context.checkSelfPermission(
             Manifest.permission.WRITE_EXTERNAL_STORAGE
         ) == PackageManager.PERMISSION_GRANTED
@@ -38,7 +48,7 @@ object Workspace {
     }
 
     fun needsLegacyStoragePermission(context: Context): Boolean =
-        Build.VERSION.SDK_INT < Build.VERSION_CODES.R && !hasLegacyStorageAccess(context)
+        usesLegacyStorage(context) && !hasLegacyStorageAccess(context)
 
     fun ensure(dir: File): Boolean {
         if (dir.isDirectory) return true
@@ -69,6 +79,9 @@ object Workspace {
      * @return true, если удалось открыть хоть один системный экран.
      */
     fun openAllFilesSettings(context: Context): Boolean {
+        // В legacy-режиме «Доступ ко всем файлам» не существует: нужное
+        // разрешение выдаётся на карточке приложения.
+        if (usesLegacyStorage(context)) return openAppDetails(context)
         val packageUri = Uri.parse("package:" + context.packageName)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
             val candidates = listOf(

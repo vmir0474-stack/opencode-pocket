@@ -67,7 +67,7 @@ object Environment {
         // Инструменты разработки: на rootless-телефоне их обычно нет.
         "git", "node", "npm", "npx", "python", "python3", "pip", "pip3",
         "jq", "bash", "make", "gcc", "clang", "cc", "sqlite3", "openssl",
-        // Обёртка Pocket Dev: появляется в PATH только в сборке dev.
+        // Обёртка Pocket Dev: появляется в PATH после распаковки proot.
         "dev",
     )
 
@@ -89,11 +89,9 @@ object Environment {
     fun legacyConfigFile(paths: ServerPaths): File =
         File(paths.config, "opencode/${ConfigStore.LEGACY_FILE_NAME}")
 
-    fun storageMode(context: Context): String = when {
-        Build.VERSION.SDK_INT >= Build.VERSION_CODES.R ->
-            if (Workspace.hasAllFilesAccess(context)) STORAGE_ALL_FILES else STORAGE_NONE
-        Workspace.hasAllFilesAccess(context) -> STORAGE_LEGACY
-        else -> STORAGE_NONE
+    fun storageMode(context: Context): String {
+        if (!Workspace.hasAllFilesAccess(context)) return STORAGE_NONE
+        return if (Workspace.usesLegacyStorage(context)) STORAGE_LEGACY else STORAGE_ALL_FILES
     }
 
     /**
@@ -186,7 +184,7 @@ object Environment {
                 "- Батарея: оптимизация включена, в фоне Android может ограничивать сеть."
             }
         )
-        val pocketDev = BuildConfig.POCKET_DEV && "dev" in report.availableNames
+        val pocketDev = "dev" in report.availableNames
         if (report.rootBinary) {
             appendLine("- Бинарник `su` в системе есть, но сервер запущен от обычного uid приложения, не от root.")
         } else if (pocketDev) {
@@ -203,7 +201,7 @@ object Environment {
                 "- Доступно: ${report.availableNames.joinToString(", ")}."
             }
         )
-        val missing = report.missing.filter { it != "dev" || BuildConfig.POCKET_DEV }
+        val missing = report.missing.filter { it != "dev" }
         if (missing.isNotEmpty()) {
             appendLine("- Недоступно: ${missing.joinToString(", ")}.")
         }

@@ -231,9 +231,16 @@ private fun WorkspaceOnboarding(vm: PocketViewModel) {
         }
         Spacer(Modifier.height(4.dp))
         Text(
-            "Чтобы агент видел /sdcard/OpenCode, выдай «Доступ ко всем файлам» " +
-                "в разделе «Специальный доступ». На Android 13+ отдельного разрешения " +
-                "«Память» больше нет. Без доступа сервер работает во внутренней папке.",
+            if (vm.legacyStorage) {
+                "Чтобы агент видел /sdcard/OpenCode, разреши «Память» в свойствах " +
+                    "приложения. Приложение работает в legacy-режиме хранилища, поэтому " +
+                    "отдельный «Доступ ко всем файлам» не нужен. Без разрешения сервер " +
+                    "работает во внутренней папке."
+            } else {
+                "Чтобы агент видел /sdcard/OpenCode, выдай «Доступ ко всем файлам» " +
+                    "в разделе «Специальный доступ». Без доступа сервер работает во " +
+                    "внутренней папке."
+            },
             color = Muted,
             fontSize = 11.5.sp,
             lineHeight = 16.sp
@@ -245,8 +252,12 @@ private fun WorkspaceOnboarding(vm: PocketViewModel) {
                     if (!vm.openAllFilesSettings()) {
                         Toast.makeText(
                             context,
-                            "Настройки не открылись. Путь: Приложения → OpenCode Pocket → " +
-                                "Специальный доступ → Доступ ко всем файлам",
+                            if (vm.legacyStorage) {
+                                "Настройки не открылись. Путь: Приложения → OpenCode Pocket → Разрешения → Память"
+                            } else {
+                                "Настройки не открылись. Путь: Приложения → OpenCode Pocket → " +
+                                    "Специальный доступ → Доступ ко всем файлам"
+                            },
                             Toast.LENGTH_LONG,
                         ).show()
                     }

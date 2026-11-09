@@ -63,7 +63,7 @@ fun SettingsScreen(vm: PocketViewModel) {
         ServerPanel(vm)
         WorkspacePanel(vm)
         EnvironmentPanel(vm)
-        if (BuildConfig.POCKET_DEV) DevPanel()
+        DevPanel()
         QuotaPanel(vm)
         MigrationPanel(vm)
         McpPanel(vm)

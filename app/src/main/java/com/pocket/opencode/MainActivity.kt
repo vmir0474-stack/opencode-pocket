@@ -85,6 +85,7 @@ class MainActivity : ComponentActivity() {
             navigationBarStyle = SystemBarStyle.dark(AndroidColor.TRANSPARENT)
         )
         if (Build.VERSION.SDK_INT >= 33 &&
+            applicationInfo.targetSdkVersion >= 33 &&
             checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) !=
             PackageManager.PERMISSION_GRANTED
         ) {
@@ -93,9 +94,9 @@ class MainActivity : ComponentActivity() {
         requestMediaPermissionsOnce()
         if (savedInstanceState == null) handleSharedFiles(intent)
         if (SettingsStore(this).mode == ServerMode.EMBEDDED) {
-            // На Android 8–10 каталог /sdcard/OpenCode открывается обычным
-            // runtime-разрешением. На 11+ используется отдельный экран
-            // «Доступ ко всем файлам» из настроек приложения.
+            // targetSdk 28 работает в legacy-режиме хранилища на всех
+            // версиях Android, поэтому /sdcard/OpenCode открывается обычным
+            // runtime-разрешением «Память».
             if (Workspace.needsLegacyStoragePermission(this)) {
                 requestPermissions(
                     arrayOf(Manifest.permission.WRITE_EXTERNAL_STORAGE),
@@ -118,12 +119,12 @@ class MainActivity : ComponentActivity() {
     }
 
     /**
-     * Android 13+ разделил доступ к медиа на READ_MEDIA_*. Без них агент
-     * видит имена файлов, но не может прочитать содержимое. Спрашиваем один
-     * раз; «Доступ ко всем файлам» этот запрос перекрывает.
+     * Android 13+ разделил доступ к медиа на READ_MEDIA_*. Эти разрешения
+     * действуют только для targetSdk 33+. Приложение собирается с targetSdk
+     * 28 и читает медиа через legacy-доступ, поэтому запрос не нужен.
      */
     private fun requestMediaPermissionsOnce() {
-        if (Build.VERSION.SDK_INT < 33) return
+        if (Build.VERSION.SDK_INT < 33 || applicationInfo.targetSdkVersion < 33) return
         val store = SettingsStore(this)
         if (store.mediaAsked) return
         val perms = mutableListOf(

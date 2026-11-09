@@ -91,7 +91,7 @@ fun EnvironmentPanel(vm: PocketViewModel) {
                 "Хранилище",
                 when (report.storageMode) {
                     "all_files" -> "Доступ ко всем файлам"
-                    "legacy" -> "Разрешение Android (до 11)"
+                    "legacy" -> "Разрешение «Память» (legacy)"
                     else -> "Только внутренняя папка"
                 },
                 valueColor = if (report.storageAccess) Mint else Warn

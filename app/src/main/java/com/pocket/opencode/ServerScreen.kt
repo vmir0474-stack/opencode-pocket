@@ -176,9 +176,9 @@ fun WorkspacePanel(vm: PocketViewModel) {
         Spacer(Modifier.height(10.dp))
         Row(verticalAlignment = Alignment.CenterVertically) {
             Column(Modifier.weight(1f)) {
-                Text("Доступ ко всем файлам", color = TextMain, fontSize = 12.5.sp)
+                Text("Доступ к файлам", color = TextMain, fontSize = 12.5.sp)
                 Text(
-                    if (vm.hasAllFilesAccess) "Разрешён в системных настройках" else "Не разрешён",
+                    if (vm.hasAllFilesAccess) "Разрешён" else "Не разрешён",
                     color = if (vm.hasAllFilesAccess) Mint else Warn,
                     fontSize = 10.5.sp
                 )
@@ -189,15 +189,17 @@ fun WorkspacePanel(vm: PocketViewModel) {
             )
         }
         Spacer(Modifier.height(8.dp))
-        val modernStorage = android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.R
         Text(
-            if (modernStorage) {
-                "Android выдаёт этот доступ только в системных настройках: " +
-                    "«Настройки → Приложения → OpenCode Pocket → Доступ ко всем файлам». " +
-                    "После выдачи вернись в приложение — сервер перезапустится сам."
-            } else {
-                "На Android 8–10 достаточно разрешить «Память» в свойствах приложения. " +
-                    "После выдачи вернись в приложение — сервер перезапустится сам."
+            when {
+                vm.legacyStorage ->
+                    "Приложение работает в legacy-режиме хранилища. Достаточно разрешить " +
+                        "«Память» в свойствах приложения: «Настройки → Приложения → " +
+                        "OpenCode Pocket → Разрешения». После выдачи вернись в приложение — " +
+                        "сервер перезапустится сам."
+                else ->
+                    "Android выдаёт этот доступ только в системных настройках: " +
+                        "«Настройки → Приложения → OpenCode Pocket → Доступ ко всем файлам». " +
+                        "После выдачи вернись в приложение — сервер перезапустится сам."
             },
             color = Dim,
             fontSize = 10.5.sp,
@@ -209,8 +211,12 @@ fun WorkspacePanel(vm: PocketViewModel) {
                 if (!vm.openAllFilesSettings()) {
                     Toast.makeText(
                         context,
-                        "Настройки не открылись. Путь: Приложения → OpenCode Pocket → " +
-                            "Специальный доступ → Доступ ко всем файлам",
+                        if (vm.legacyStorage) {
+                            "Настройки не открылись. Путь: Приложения → OpenCode Pocket → Разрешения → Память"
+                        } else {
+                            "Настройки не открылись. Путь: Приложения → OpenCode Pocket → " +
+                                "Специальный доступ → Доступ ко всем файлам"
+                        },
                         Toast.LENGTH_LONG,
                     ).show()
                 }
@@ -221,8 +227,8 @@ fun WorkspacePanel(vm: PocketViewModel) {
             Text(
                 when {
                     vm.hasAllFilesAccess -> "Открыть настройки доступа"
-                    modernStorage -> "Выдать доступ ко всем файлам"
-                    else -> "Разрешить доступ к памяти"
+                    vm.legacyStorage -> "Разрешить доступ к памяти"
+                    else -> "Выдать доступ ко всем файлам"
                 },
                 fontSize = 11.5.sp
             )
@@ -278,10 +284,10 @@ fun WorkspacePanel(vm: PocketViewModel) {
         Spacer(Modifier.height(10.dp))
         val accessText = when {
             !vm.hasAllFilesAccess ->
-                if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.R) {
-                    "Нет «Доступа ко всем файлам» — /sdcard недоступен"
-                } else {
+                if (vm.legacyStorage) {
                     "Нет разрешения на память — /sdcard недоступен"
+                } else {
+                    "Нет «Доступа ко всем файлам» — /sdcard недоступен"
                 }
             vm.workspaceUsable -> "Каталог доступен для записи"
             else -> "Каталог ещё не создан или недоступен"
