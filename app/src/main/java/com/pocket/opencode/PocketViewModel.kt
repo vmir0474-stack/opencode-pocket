@@ -1,6 +1,7 @@
 package com.pocket.opencode
 
 import android.app.Application
+import android.content.Intent
 import android.net.Uri
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
@@ -55,6 +56,8 @@ class PocketViewModel(application: Application) : AndroidViewModel(application) 
     var workspacePath by mutableStateOf(settings.workspacePath)
     var hasAllFilesAccess by mutableStateOf(Workspace.hasAllFilesAccess(application))
     var workspaceUsable by mutableStateOf(false)
+    var importBusy by mutableStateOf(false)
+    var importMessage by mutableStateOf("")
     var onboardingDismissed by mutableStateOf(settings.onboardingDismissed)
     private var observedAccess = hasAllFilesAccess
 
@@ -256,7 +259,10 @@ class PocketViewModel(application: Application) : AndroidViewModel(application) 
                 .put("version", serverStatus.version)
         )
         put("workspace", workspacePath)
+        put("workspaceActual", serverStatus.workspace)
+        put("workspaceUsable", workspaceUsable)
         put("access", hasAllFilesAccess)
+        put("mediaAccess", Environment.hasMediaAccess(getApplication()))
         environment?.let { report ->
             put("environment", JSONObject()
                 .put("storage", report.storageMode)
@@ -347,6 +353,44 @@ class PocketViewModel(application: Application) : AndroidViewModel(application) 
                     api.raw(baseUrl, password, method, path, args.optJSONObject("body"))
                 }
                 JSONObject().put("ok", true).put("raw", raw)
+            }
+
+            "apps" -> {
+                val pm = app.packageManager
+                val launcher = Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER)
+                val items = JSONArray()
+                runCatching { pm.queryIntentActivities(launcher, 0) }
+                    .getOrDefault(emptyList())
+                    .distinctBy { it.activityInfo.packageName }
+                    .sortedBy { it.loadLabel(pm).toString().lowercase(Locale.getDefault()) }
+                    .forEach { info ->
+                        items.put(
+                            JSONObject()
+                                .put("package", info.activityInfo.packageName)
+                                .put("label", info.loadLabel(pm).toString())
+                        )
+                    }
+                JSONObject().put("ok", true).put("apps", items)
+            }
+
+            "launch" -> {
+                val pkg = args.optString("package").trim()
+                if (pkg.isBlank()) {
+                    JSONObject().put("error", "package is required")
+                } else {
+                    val pm = app.packageManager
+                    val intent = pm.getLaunchIntentForPackage(pkg)
+                    if (intent == null) {
+                        JSONObject().put("error", "no launcher activity: $pkg")
+                    } else {
+                        intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                        runCatching { app.startActivity(intent) }
+                            .fold(
+                                { JSONObject().put("ok", true).put("package", pkg) },
+                                { JSONObject().put("error", it.message ?: "startActivity failed") },
+                            )
+                    }
+                }
             }
 
             else -> JSONObject().put("error", "unknown action: $name")
@@ -460,8 +504,14 @@ class PocketViewModel(application: Application) : AndroidViewModel(application) 
         }
     }
 
-    fun openBatterySettings() {
-        Environment.openBatterySettings(getApplication())
+    fun openBatterySettings(): Boolean {
+        val opened = Environment.openBatterySettings(getApplication())
+        if (!opened) {
+            DebugLog.event("permissions", "battery settings unavailable")
+            statusDetail = "Не удалось открыть настройки батареи. " +
+                "Настройки → Приложения → OpenCode Pocket → Батарея."
+        }
+        return opened
     }
 
     /**
@@ -503,8 +553,52 @@ class PocketViewModel(application: Application) : AndroidViewModel(application) 
         }
     }
 
-    fun openAllFilesSettings() {
-        Workspace.openAllFilesSettings(getApplication())
+    fun openAllFilesSettings(): Boolean {
+        val opened = Workspace.openAllFilesSettings(getApplication())
+        if (!opened) {
+            DebugLog.event("permissions", "all-files settings unavailable")
+            statusDetail = "Не удалось открыть настройки. Открой вручную: " +
+                "Настройки → Приложения → OpenCode Pocket → Специальный доступ → Доступ ко всем файлам."
+        }
+        return opened
+    }
+
+    /**
+     * Копирует выбранные через SAF файлы в рабочий каталог сервера.
+     * Работает без «Доступа ко всем файлам»: content:// не требует прав
+     * на общее хранилище, а результат агент читает как обычный файл.
+     */
+    fun importFiles(uris: List<Uri>) {
+        if (uris.isEmpty() || importBusy) return
+        val target = activeWorkspace()
+        viewModelScope.launch {
+            importBusy = true
+            importMessage = "Копирую ${uris.size} файл(ов)…"
+            val result = withContext(Dispatchers.IO) {
+                WorkspaceImporter.import(getApplication(), target, uris)
+            }
+            importBusy = false
+            importMessage = when {
+                result.failed.isEmpty() && result.imported.isNotEmpty() ->
+                    "Добавлено: ${result.imported.joinToString(", ")}"
+                result.imported.isEmpty() ->
+                    "Не удалось добавить: ${result.failed.joinToString(", ")}"
+                else -> "Добавлено: ${result.imported.size}, ошибок: ${result.failed.size}"
+            }
+            DebugLog.event(
+                "workspace",
+                "import",
+                mapOf("dir" to target.absolutePath, "ok" to result.imported.size.toString()),
+            )
+        }
+    }
+
+    private fun activeWorkspace(): File {
+        val actual = serverStatus.workspace
+        if (actual.isNotBlank() && Workspace.isUsable(File(actual))) return File(actual)
+        val requested = File(workspacePath.ifBlank { Workspace.defaultPath() })
+        if (Workspace.isUsable(requested)) return requested
+        return File(getApplication<Application>().filesDir, "opencode/workspace")
     }
 
     fun dismissOnboarding() {

@@ -16,6 +16,7 @@ class EnvironmentTest {
         available: List<String> = listOf("sh", "curl", "rg", "pocket-rs"),
         missing: List<String> = listOf("git", "node", "python3"),
         storage: String = "none",
+        media: Boolean = false,
         battery: Boolean = false,
         root: Boolean = false,
     ) = EnvReport(
@@ -25,10 +26,13 @@ class EnvironmentTest {
         available = available.map { EnvCommand(it, "/system/bin/$it") },
         missing = missing,
         storageMode = storage,
+        mediaAccess = media,
         batteryExempt = battery,
         rootBinary = root,
         workspace = "/sdcard/OpenCode",
         serverPath = "/data/tools:/system/bin",
+        bridgeUrl = "http://127.0.0.1:4097",
+        bridgeTokenFile = "/data/user/0/com.pocket.opencode/files/opencode/debug/token",
     )
 
     @Test
@@ -66,6 +70,39 @@ class EnvironmentTest {
         )
         assertTrue(ready.contains("доступ ко всем файлам выдан"))
         assertTrue(ready.contains("исключено из оптимизации"))
+    }
+
+    @Test
+    fun `instructions describe media access when files access is missing`() {
+        val noMedia = Environment.instructions(report())
+        assertTrue(noMedia.contains("Медиа: чтение фото/видео/аудио не разрешено"))
+
+        val media = Environment.instructions(report(media = true))
+        assertTrue(media.contains("Медиа: разрешено чтение фото/видео/аудио"))
+    }
+
+    @Test
+    fun `instructions skip media note when all files access is granted`() {
+        val text = Environment.instructions(report(storage = "all_files", media = true))
+        assertFalse(text.contains("Медиа:"))
+    }
+
+    @Test
+    fun `instructions offer replacements for missing commands`() {
+        val text = Environment.instructions(report())
+        assertTrue(text.contains("`zip` → `tar"))
+        assertTrue(text.contains("`wget` → `curl -L -o"))
+        assertTrue(text.contains("`git` замены нет"))
+    }
+
+    @Test
+    fun `instructions explain app launching through the bridge`() {
+        val text = Environment.instructions(report())
+        assertTrue(text.contains("\"name\":\"apps\""))
+        assertTrue(text.contains("\"name\":\"launch\""))
+        assertTrue(text.contains("/data/user/0/com.pocket.opencode/files/opencode/debug/token"))
+        assertTrue(text.contains("http://127.0.0.1:4097"))
+        assertTrue(text.contains("Android запрещает фоновый запуск"))
     }
 
     @Test

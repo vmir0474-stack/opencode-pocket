@@ -31,10 +31,15 @@ data class EnvReport(
     val missing: List<String>,
     /** all_files — MANAGE_EXTERNAL_STORAGE, legacy — runtime permission до Android 11. */
     val storageMode: String,
+    /** Android 13+: выданы ли READ_MEDIA_IMAGES/VIDEO/AUDIO. */
+    val mediaAccess: Boolean,
     val batteryExempt: Boolean,
     val rootBinary: Boolean,
     val workspace: String,
     val serverPath: String,
+    /** Локальный отладочный мост: через него можно запускать приложения. */
+    val bridgeUrl: String,
+    val bridgeTokenFile: String,
 ) {
     val storageAccess: Boolean get() = storageMode != "none"
     val availableNames: List<String> get() = available.map { it.name }
@@ -89,6 +94,24 @@ object Environment {
         else -> STORAGE_NONE
     }
 
+    /**
+     * Android 13+ разделил доступ к медиа: без READ_MEDIA_* приложение видит
+     * имена файлов, но не может их прочитать. Полный доступ к файлам это
+     * перекрывает, поэтому проверяем его первым.
+     */
+    fun hasMediaAccess(context: Context): Boolean {
+        if (Workspace.hasAllFilesAccess(context)) return true
+        if (Build.VERSION.SDK_INT >= 33) {
+            val images = context.checkSelfPermission(android.Manifest.permission.READ_MEDIA_IMAGES)
+            val video = context.checkSelfPermission(android.Manifest.permission.READ_MEDIA_VIDEO)
+            val audio = context.checkSelfPermission(android.Manifest.permission.READ_MEDIA_AUDIO)
+            return images == android.content.pm.PackageManager.PERMISSION_GRANTED ||
+                video == android.content.pm.PackageManager.PERMISSION_GRANTED ||
+                audio == android.content.pm.PackageManager.PERMISSION_GRANTED
+        }
+        return false
+    }
+
     fun batteryExempt(context: Context): Boolean = runCatching {
         val power = context.getSystemService(Context.POWER_SERVICE) as PowerManager
         power.isIgnoringBatteryOptimizations(context.packageName)
@@ -115,10 +138,13 @@ object Environment {
             available = found.map { EnvCommand(it.key, it.value) },
             missing = PROBES.filter { it !in found },
             storageMode = storageMode(context),
+            mediaAccess = hasMediaAccess(context),
             batteryExempt = batteryExempt(context),
             rootBinary = hasRootBinary(),
             workspace = workspace.absolutePath,
             serverPath = pathDirs.joinToString(":") { it.absolutePath },
+            bridgeUrl = DebugBridge.info().optString("url"),
+            bridgeTokenFile = File(context.filesDir, "opencode/debug/token").absolutePath,
         )
     }
 
@@ -138,9 +164,19 @@ object Environment {
             when (report.storageMode) {
                 STORAGE_ALL_FILES -> "- Общее хранилище: доступ ко всем файлам выдан."
                 STORAGE_LEGACY -> "- Общее хранилище: доступ выдан через разрешение Android (до API 30)."
-                else -> "- Общее хранилище: доступа нет, работай только в рабочем каталоге."
+                else -> "- Общее хранилище: полного доступа нет. `/sdcard` может читаться частично, " +
+                    "но запись в общие папки не гарантирована — сохраняй файлы только в рабочем каталоге."
             }
         )
+        if (!report.storageAccess) {
+            appendLine(
+                if (report.mediaAccess) {
+                    "- Медиа: разрешено чтение фото/видео/аудио, запись в них — нет."
+                } else {
+                    "- Медиа: чтение фото/видео/аудио не разрешено; имена файлов видны, содержимое — нет."
+                }
+            )
+        }
         appendLine(
             if (report.batteryExempt) {
                 "- Батарея: приложение исключено из оптимизации."
@@ -173,6 +209,20 @@ object Environment {
                 "- Встроенные инструменты: ${builtins.joinToString(" и ") { "`$it`" }} уже в PATH."
             }
         )
+        appendLine()
+        appendLine("## Замены отсутствующих команд")
+        appendLine("- `zip` → `tar -czf архив.tar.gz каталог` или `tar -cf архив.tar файлы`.")
+        appendLine("- `wget` → `curl -L -o файл URL`.")
+        appendLine("- `jq`, `sqlite3`, `openssl` замены нет: не вызывай их, разбирай текст через `sed`/`awk`.")
+        appendLine("- `git` замены нет: работай с файлами напрямую.")
+        appendLine()
+        appendLine("## Управление телефоном")
+        appendLine("- Приложение работает от обычного uid, без root и без shell-прав. `am`, `input`, `monkey`, `wm`, `screencap`, `settings`, `content`, `dumpsys` недоступны — не трать на них попытки.")
+        appendLine("- Установленные приложения можно перечислить и запустить через локальный мост: " +
+            "`curl -s -H \"Authorization: Bearer $(cat ${report.bridgeTokenFile})\" ${report.bridgeUrl}/action " +
+            "-d '{\"name\":\"apps\"}'` для списка и `-d '{\"name\":\"launch\",\"package\":\"имя\"}'` для запуска.")
+        appendLine("- Запуск сработает, только пока OpenCode Pocket открыт на экране: Android запрещает фоновый запуск чужих activity. Управлять приложением после запуска (тапы, ввод) нельзя.")
+        appendLine("- Если браузера нет, ссылки открыть нечем; используй `webfetch`.")
         appendLine()
         appendLine("## Поиск в интернете")
         appendLine("- Встроенный `websearch` работает через провайдера, подключённого в разделе «Модели»: Exa, Tavily, Firecrawl, Parallel или TinyFish. Свой ключ снимает ограничения keyless-режима; вход в OpenCode Console тоже даёт доступ к поиску.")
@@ -284,7 +334,7 @@ object Environment {
         }.onFailure { DebugLog.error("environment", it) }
     }
 
-    fun openBatterySettings(context: Context) {
+    fun openBatterySettings(context: Context): Boolean {
         val request = Intent(
             Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS,
             Uri.parse("package:" + context.packageName)
@@ -302,9 +352,19 @@ object Environment {
                     )
                 }
         }.getOrNull()
-        runCatching { context.startActivity(direct ?: request) }
-            .recoverCatching {
-                context.startActivity(Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS))
-            }
+        val candidates = listOfNotNull(
+            direct,
+            request,
+            Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS),
+            Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS)
+                .setData(Uri.parse("package:" + context.packageName)),
+        )
+        // Контекст здесь Application, поэтому без NEW_TASK startActivity
+        // падает и кнопка молча ничего не делает.
+        return candidates.any { intent ->
+            runCatching {
+                context.startActivity(intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+            }.isSuccess
+        }
     }
 }

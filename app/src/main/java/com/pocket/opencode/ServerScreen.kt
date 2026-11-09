@@ -1,5 +1,8 @@
 package com.pocket.opencode
 
+import android.widget.Toast
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -24,6 +27,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
@@ -163,6 +167,10 @@ private fun LogBlock(vm: PocketViewModel) {
 
 @Composable
 fun WorkspacePanel(vm: PocketViewModel) {
+    val context = LocalContext.current
+    val importer = rememberLauncherForActivityResult(
+        ActivityResultContracts.OpenMultipleDocuments()
+    ) { uris -> vm.importFiles(uris) }
     Panel {
         SectionTitle("Доступ к файлам и каталог")
         Spacer(Modifier.height(10.dp))
@@ -197,7 +205,16 @@ fun WorkspacePanel(vm: PocketViewModel) {
         )
         Spacer(Modifier.height(10.dp))
         Button(
-            onClick = { vm.openAllFilesSettings() },
+            onClick = {
+                if (!vm.openAllFilesSettings()) {
+                    Toast.makeText(
+                        context,
+                        "Настройки не открылись. Путь: Приложения → OpenCode Pocket → " +
+                            "Специальный доступ → Доступ ко всем файлам",
+                        Toast.LENGTH_LONG,
+                    ).show()
+                }
+            },
             shape = RoundedCornerShape(13.dp),
             modifier = Modifier.fillMaxWidth()
         ) {
@@ -241,6 +258,22 @@ fun WorkspacePanel(vm: PocketViewModel) {
             ) {
                 Text("Перезапуск", fontSize = 11.5.sp)
             }
+        }
+        Spacer(Modifier.height(10.dp))
+        OutlinedButton(
+            onClick = { importer.launch(arrayOf("*/*")) },
+            shape = RoundedCornerShape(13.dp),
+            modifier = Modifier.fillMaxWidth(),
+            enabled = !vm.importBusy
+        ) {
+            Text(
+                if (vm.importBusy) "Копирую…" else "Добавить файлы в проект",
+                fontSize = 11.5.sp
+            )
+        }
+        if (vm.importMessage.isNotBlank()) {
+            Spacer(Modifier.height(6.dp))
+            Text(vm.importMessage, color = Muted, fontSize = 10.5.sp, lineHeight = 15.sp)
         }
         Spacer(Modifier.height(10.dp))
         val accessText = when {

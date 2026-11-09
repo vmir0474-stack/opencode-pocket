@@ -58,26 +58,52 @@ object Workspace {
         }.isSuccess
     }
 
-    fun openAllFilesSettings(context: Context) {
+    /**
+     * Открывает системный экран выдачи «Доступа ко всем файлам».
+     *
+     * Важно: контекст здесь обычно Application, а startActivity из него
+     * требует FLAG_ACTIVITY_NEW_TASK — без флага Android бросает исключение,
+     * и кнопка молча ничего не делает. Поэтому флаг ставим всегда, а если
+     * экран не нашёлся (OEM его прячет), пробуем следующие варианты.
+     *
+     * @return true, если удалось открыть хоть один системный экран.
+     */
+    fun openAllFilesSettings(context: Context): Boolean {
+        val packageUri = Uri.parse("package:" + context.packageName)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-            val app = Intent(
-                Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION,
-                Uri.parse("package:" + context.packageName)
+            val candidates = listOf(
+                Intent(Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION, packageUri),
+                Intent(Settings.ACTION_MANAGE_ALL_FILES_ACCESS_PERMISSION),
+                Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, packageUri),
+                Intent(Settings.ACTION_SETTINGS),
             )
-            runCatching { context.startActivity(app) }
-                .recoverCatching {
-                    context.startActivity(Intent(Settings.ACTION_MANAGE_ALL_FILES_ACCESS_PERMISSION))
-                }
-        } else {
-            // На старых Android это обычное разрешение приложения.
-            val details = Intent(
-                Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
-                Uri.parse("package:" + context.packageName)
-            )
-            runCatching { context.startActivity(details) }
-                .recoverCatching {
-                    context.startActivity(Intent(Settings.ACTION_SETTINGS))
-                }
+            return openFirst(context, candidates)
         }
+        // На старых Android это обычное разрешение приложения.
+        val candidates = listOf(
+            Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, packageUri),
+            Intent(Settings.ACTION_SETTINGS),
+        )
+        return openFirst(context, candidates)
     }
+
+    /** Карточка приложения в настройках: там же видно выданные разрешения. */
+    fun openAppDetails(context: Context): Boolean =
+        openFirst(
+            context,
+            listOf(
+                Intent(
+                    Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
+                    Uri.parse("package:" + context.packageName)
+                ),
+                Intent(Settings.ACTION_SETTINGS),
+            ),
+        )
+
+    private fun openFirst(context: Context, intents: List<Intent>): Boolean =
+        intents.any { intent ->
+            runCatching {
+                context.startActivity(intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+            }.isSuccess
+        }
 }

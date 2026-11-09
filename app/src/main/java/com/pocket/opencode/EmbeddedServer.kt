@@ -91,12 +91,19 @@ object EmbeddedServer {
      * всё равно должен запуститься — уходим во внутреннюю папку.
      */
     private fun pickWorkspace(root: File, requested: File): File {
-        if (requested.isDirectory) return requested
-        if (runCatching { requested.mkdirs() }.getOrDefault(false) && requested.isDirectory) {
-            return requested
-        }
+        // Недостаточно проверить isDirectory: после отзыва «Доступа ко всем
+        // файлам» каталог остаётся, но запись в него уже запрещена. Тогда
+        // сервер молча работал бы в нерабочем месте, поэтому пробуем запись.
+        if (Workspace.isUsable(requested)) return requested
         val fallback = File(root, "workspace")
         runCatching { fallback.mkdirs() }
+        if (fallback.absolutePath != requested.absolutePath) {
+            DebugLog.event(
+                "workspace",
+                "fallback",
+                mapOf("requested" to requested.absolutePath, "actual" to fallback.absolutePath),
+            )
+        }
         return fallback
     }
 

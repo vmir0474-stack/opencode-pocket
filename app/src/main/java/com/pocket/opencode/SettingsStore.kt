@@ -124,6 +124,11 @@ class SettingsStore(context: Context) {
         get() = prefs.getBoolean("onboarding_dismissed", false)
         set(value) = prefs.edit().putBoolean("onboarding_dismissed", value).apply()
 
+    /** Спрашивали ли READ_MEDIA_* (Android 13+), чтобы не показывать диалог каждый запуск. */
+    var mediaAsked: Boolean
+        get() = prefs.getBoolean("media_asked", false)
+        set(value) = prefs.edit().putBoolean("media_asked", value).apply()
+
     var serverPort: Int
         get() = prefs.getInt("server_port", 4096)
         set(value) = prefs.edit().putInt("server_port", value).apply()

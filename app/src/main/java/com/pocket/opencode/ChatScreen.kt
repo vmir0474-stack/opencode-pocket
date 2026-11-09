@@ -1,6 +1,7 @@
 package com.pocket.opencode
 
 import android.graphics.Bitmap
+import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.BorderStroke
@@ -204,6 +205,7 @@ private fun ContextBar(
 
 @Composable
 private fun WorkspaceOnboarding(vm: PocketViewModel) {
+    val context = LocalContext.current
     Column(
         modifier = Modifier
             .fillMaxWidth()
@@ -229,8 +231,9 @@ private fun WorkspaceOnboarding(vm: PocketViewModel) {
         }
         Spacer(Modifier.height(4.dp))
         Text(
-            "Чтобы агент видел /sdcard/OpenCode, выдай «Доступ ко всем файлам». " +
-                "Без него сервер работает во внутренней папке приложения.",
+            "Чтобы агент видел /sdcard/OpenCode, выдай «Доступ ко всем файлам» " +
+                "в разделе «Специальный доступ». На Android 13+ отдельного разрешения " +
+                "«Память» больше нет. Без доступа сервер работает во внутренней папке.",
             color = Muted,
             fontSize = 11.5.sp,
             lineHeight = 16.sp
@@ -238,7 +241,16 @@ private fun WorkspaceOnboarding(vm: PocketViewModel) {
         Spacer(Modifier.height(10.dp))
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             Button(
-                onClick = { vm.openAllFilesSettings() },
+                onClick = {
+                    if (!vm.openAllFilesSettings()) {
+                        Toast.makeText(
+                            context,
+                            "Настройки не открылись. Путь: Приложения → OpenCode Pocket → " +
+                                "Специальный доступ → Доступ ко всем файлам",
+                            Toast.LENGTH_LONG,
+                        ).show()
+                    }
+                },
                 shape = RoundedCornerShape(11.dp)
             ) {
                 Text("Открыть настройки", fontSize = 11.5.sp)
@@ -980,7 +992,8 @@ private fun AssistantMessage(message: UiMessage, live: Boolean, onOpenModels: ()
             if (index != blocks.lastIndex) Spacer(Modifier.height(10.dp))
         }
         message.error?.takeIf { it.isNotBlank() }?.let { error ->
-            val freeLimit = message.errorType == "provider.free-limit"
+            val failure = providerFailure(message.errorType, error)
+            val actionable = failure != ProviderFailure.OTHER
             Spacer(Modifier.height(8.dp))
             Surface(
                 color = Danger.copy(alpha = 0.10f),
@@ -989,12 +1002,12 @@ private fun AssistantMessage(message: UiMessage, live: Boolean, onOpenModels: ()
             ) {
                 Column(Modifier.padding(horizontal = 12.dp, vertical = 9.dp)) {
                     Text(
-                        if (freeLimit) freeLimitText() else error,
+                        if (actionable) failureText(failure, error) else error,
                         color = Danger,
                         fontSize = 12.sp,
                         lineHeight = 17.sp
                     )
-                    if (freeLimit) {
+                    if (actionable) {
                         TextButton(
                             onClick = onOpenModels,
                             contentPadding = PaddingValues(horizontal = 0.dp, vertical = 0.dp)

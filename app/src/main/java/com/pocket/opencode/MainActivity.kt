@@ -1,7 +1,9 @@
 package com.pocket.opencode
 
 import android.Manifest
+import android.content.Intent
 import android.content.pm.PackageManager
+import android.net.Uri
 import android.graphics.Color as AndroidColor
 import android.os.Build
 import android.os.Bundle
@@ -88,6 +90,8 @@ class MainActivity : ComponentActivity() {
         ) {
             requestPermissions(arrayOf(Manifest.permission.POST_NOTIFICATIONS), REQ_NOTIFICATIONS)
         }
+        requestMediaPermissionsOnce()
+        if (savedInstanceState == null) handleSharedFiles(intent)
         if (SettingsStore(this).mode == ServerMode.EMBEDDED) {
             // На Android 8–10 каталог /sdcard/OpenCode открывается обычным
             // runtime-разрешением. На 11+ используется отдельный экран
@@ -107,9 +111,63 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        handleSharedFiles(intent)
+    }
+
+    /**
+     * Android 13+ разделил доступ к медиа на READ_MEDIA_*. Без них агент
+     * видит имена файлов, но не может прочитать содержимое. Спрашиваем один
+     * раз; «Доступ ко всем файлам» этот запрос перекрывает.
+     */
+    private fun requestMediaPermissionsOnce() {
+        if (Build.VERSION.SDK_INT < 33) return
+        val store = SettingsStore(this)
+        if (store.mediaAsked) return
+        val perms = mutableListOf(
+            Manifest.permission.READ_MEDIA_IMAGES,
+            Manifest.permission.READ_MEDIA_VIDEO,
+            Manifest.permission.READ_MEDIA_AUDIO,
+        )
+        if (Build.VERSION.SDK_INT >= 34) {
+            perms += Manifest.permission.READ_MEDIA_VISUAL_USER_SELECTED
+        }
+        if (perms.any { checkSelfPermission(it) != PackageManager.PERMISSION_GRANTED }) {
+            store.mediaAsked = true
+            requestPermissions(perms.toTypedArray(), REQ_MEDIA)
+        }
+    }
+
+    /** Принимает файлы из «Поделиться» и складывает их в рабочий каталог. */
+    private fun handleSharedFiles(intent: Intent?) {
+        val uris = sharedUris(intent)
+        if (uris.isNotEmpty()) vm.importFiles(uris)
+    }
+
+    private fun sharedUris(intent: Intent?): List<Uri> {
+        if (intent == null) return emptyList()
+        if (intent.action != Intent.ACTION_SEND && intent.action != Intent.ACTION_SEND_MULTIPLE) {
+            return emptyList()
+        }
+        val out = mutableListOf<Uri>()
+        intent.clipData?.let { clip ->
+            for (index in 0 until clip.itemCount) clip.getItemAt(index).uri?.let { out += it }
+        }
+        if (out.isEmpty()) {
+            @Suppress("DEPRECATION")
+            intent.getParcelableExtra<Uri>(Intent.EXTRA_STREAM)?.let { out += it }
+            @Suppress("DEPRECATION")
+            intent.getParcelableArrayListExtra<Uri>(Intent.EXTRA_STREAM)?.let { out += it }
+        }
+        return out.distinct()
+    }
+
     private companion object {
         const val REQ_NOTIFICATIONS = 1
         const val REQ_STORAGE = 2
+        const val REQ_MEDIA = 3
     }
 }
 
