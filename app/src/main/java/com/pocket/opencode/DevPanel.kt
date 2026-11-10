@@ -8,16 +8,20 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
@@ -39,7 +43,12 @@ fun DevPanel() {
     val state by DevEnvironment.state.collectAsState()
     val info = remember { DeviceDiagnostics.collect(context) }
 
-    LaunchedEffect(Unit) { DevEnvironment.refresh(context) }
+    var confirmReinstall by remember { mutableStateOf(false) }
+
+    LaunchedEffect(Unit) {
+        DevEnvironment.refresh(context)
+        if (DevEnvironment.state.value.installed) DevEnvironment.test(context)
+    }
 
     Panel {
         SectionTitle("Pocket Dev") {
@@ -112,6 +121,18 @@ fun DevPanel() {
             Text(state.error, color = Warn, fontSize = 11.5.sp, lineHeight = 16.sp)
         }
 
+        if (state.checked && state.broken) {
+            Spacer(Modifier.height(10.dp))
+            Text(
+                "Часть файлов окружения не читается: обычно так бывает после apt, " +
+                    "запущенного из root-оболочки, — файлы получают чужие SELinux-метки. " +
+                    "Переустановка скачает Ubuntu заново и вернёт доступ.",
+                color = Warn,
+                fontSize = 11.sp,
+                lineHeight = 15.sp,
+            )
+        }
+
         Spacer(Modifier.height(12.dp))
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             if (!state.installed) {
@@ -131,8 +152,56 @@ fun DevPanel() {
                 enabled = !state.busy,
                 shape = RoundedCornerShape(13.dp),
             ) {
-                Text("Проверить proot", fontSize = 11.5.sp)
+                Text("Проверить окружение", fontSize = 11.5.sp)
             }
+            if (state.installed && state.broken) {
+                OutlinedButton(
+                    onClick = { confirmReinstall = true },
+                    enabled = !state.busy,
+                    shape = RoundedCornerShape(13.dp),
+                ) {
+                    Text("Переустановить", fontSize = 11.5.sp)
+                }
+            }
+        }
+
+        if (confirmReinstall) {
+            AlertDialog(
+                onDismissRequest = { confirmReinstall = false },
+                containerColor = Card,
+                title = {
+                    Text(
+                        "Переустановить окружение?",
+                        color = TextMain,
+                        fontSize = 17.sp,
+                    )
+                },
+                text = {
+                    Text(
+                        "Ubuntu будет скачана и распакована заново. Пакеты, установленные " +
+                            "через apt, и файлы внутри окружения будут удалены. Настройки " +
+                            "приложения и файлы Android не затрагиваются.",
+                        color = Muted,
+                        fontSize = 12.sp,
+                        lineHeight = 17.sp,
+                    )
+                },
+                confirmButton = {
+                    TextButton(
+                        onClick = {
+                            confirmReinstall = false
+                            scope.launch { DevEnvironment.reinstall(context) }
+                        },
+                    ) {
+                        Text("Переустановить", color = Warn, fontSize = 12.sp)
+                    }
+                },
+                dismissButton = {
+                    TextButton(onClick = { confirmReinstall = false }) {
+                        Text("Отмена", color = Muted, fontSize = 12.sp)
+                    }
+                },
+            )
         }
 
         if (state.test.isNotBlank()) {

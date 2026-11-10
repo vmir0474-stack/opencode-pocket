@@ -210,6 +210,7 @@ object Environment {
             appendLine("## Pocket Dev (Ubuntu)")
             appendLine("- `dev КОМАНДА` запускает команду в Ubuntu 24.04 через proot: `dev git --version`, `dev python3 script.py`, `dev /bin/bash -lc '…'`.")
             appendLine("- Внутри Ubuntu есть apt: `dev apt-get update && dev apt-get install -y ПАКЕТ`. Пакеты ставятся в приватный rootfs приложения, root не нужен.")
+            appendLine("- Ставь пакеты только через `dev` из этого окружения. Не запускай proot/apt через `su` или root-оболочку: новые файлы получат SELinux-метки `s0`, и приложение перестанет их читать (симптом — `Permission denied` при запуске `python3`).")
             appendLine("- `dev` без аргументов открывает bash. `/workspace` — общий рабочий каталог; `/sdcard` проброшен, если выдан доступ ко всем файлам.")
             appendLine("- `git`, `node`, `python` и другие языки вызывай только через `dev`; вне него их по-прежнему нет в PATH.")
         }

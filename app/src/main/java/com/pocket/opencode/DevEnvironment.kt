@@ -51,7 +51,17 @@ object DevEnvironment {
         val freeBytes: Long = 0,
         val error: String = "",
         val test: String = "",
+        val checked: Boolean = false,
+        val broken: Boolean = false,
     )
+
+    /** Результат одной проверки внутри гостя. */
+    internal data class Probe(val name: String, val status: String, val detail: String)
+
+    internal data class CheckReport(val probes: List<Probe>) {
+        /** `fail` — команда есть, но не запускается; `absent` — просто не установлена. */
+        val broken: Boolean get() = probes.any { it.status.startsWith("fail") }
+    }
 
     private val _state = MutableStateFlow(DevState())
     val state: StateFlow<DevState> = _state.asStateFlow()
@@ -241,6 +251,8 @@ object DevEnvironment {
                 return@withContext
             }
             val part = File(root.parentFile, "rootfs.part")
+            // Недокачанная/недораспакованная копия от прошлой попытки.
+            if (part.exists()) part.deleteRecursively()
             _state.update { it.copy(phase = "Распаковка", entries = 0) }
             val entries = DevArchive.extract(archive, part) { count ->
                 _state.update { it.copy(entries = count, phase = "Распаковка: $count файлов") }
@@ -268,11 +280,44 @@ object DevEnvironment {
                 "rootfs installed",
                 mapOf("version" to version, "entries" to entries.toString()),
             )
+            runCatching { test(context) }
         } catch (t: Throwable) {
             DebugLog.error("dev", t)
             _state.update {
                 it.copy(busy = false, error = t.message ?: t.javaClass.simpleName, phase = "Ошибка")
             }
+        }
+    }
+
+    /**
+     * Полная переустановка: текущий rootfs откладывается в rootfs.old и
+     * возвращается, если распаковка не удалась. Нужна, когда файлы
+     * окружения потеряли SELinux-метки (обычно после apt из root-оболочки)
+     * и приложение больше не может их прочитать.
+     */
+    suspend fun reinstall(context: Context) = withContext(Dispatchers.IO) {
+        if (_state.value.busy) return@withContext
+        val root = rootfs(context)
+        val backup = File(root.parentFile, "rootfs.old")
+        if (backup.exists()) backup.deleteRecursively()
+        if (root.exists() && !root.renameTo(backup)) {
+            _state.update {
+                it.copy(
+                    busy = false,
+                    phase = "Ошибка",
+                    error = "Не удалось отложить текущее окружение",
+                )
+            }
+            return@withContext
+        }
+        _state.update { it.copy(test = "", checked = false, broken = false, error = "") }
+        install(context)
+        if (_state.value.installed) {
+            runCatching { backup.deleteRecursively() }
+            DebugLog.event("dev", "rootfs reinstalled")
+        } else if (backup.exists() && !root.exists()) {
+            // Новая распаковка не удалась — возвращаем рабочее окружение.
+            runCatching { backup.renameTo(root) }
         }
     }
 
@@ -360,21 +405,112 @@ object DevEnvironment {
         File(root, "etc/hosts").writeText("127.0.0.1 localhost\n::1 localhost\n")
     }
 
-    /** Проверяет proot и, если rootfs установлен, запускает echo внутри него. */
+    /**
+     * Проверяет proot и окружение фиксированным набором команд: оболочку,
+     * разрешение симлинка python3, сам python3, его модули и git. Ошибка
+     * запуска при наличии файла означает потерянные SELinux-метки, а не
+     * отсутствие пакета — такие случаи помечаются как `fail`.
+     */
     suspend fun test(context: Context): String = withContext(Dispatchers.IO) {
         val bin = binDir(context)
         val proot = File(bin, "proot")
-        if (!proot.canExecute()) return@withContext "proot не распакован"
-        val prootVersion = run(bin, proot.absolutePath, "--version", timeoutSeconds = 15)
-        val installed = readVersion(rootfs(context)).isNotBlank()
-        val guest = if (installed) {
-            run(bin, wrapper(context).absolutePath, "/bin/echo", "pocket-dev", timeoutSeconds = 30)
-        } else {
-            "rootfs не установлен"
+        if (!proot.canExecute()) {
+            val message = "proot не распакован"
+            _state.update { it.copy(test = message, checked = true, broken = false) }
+            return@withContext message
         }
-        val result = "proot: ${prootVersion.trim().take(120)}\nguest: ${guest.trim().take(200)}"
-        _state.update { it.copy(test = result) }
-        result
+        val version = prootVersion(
+            run(bin, proot.absolutePath, "--version", timeoutSeconds = 15),
+        )
+        val installed = readVersion(rootfs(context)).isNotBlank()
+        val report = if (installed) {
+            val output = run(
+                bin,
+                wrapper(context).absolutePath,
+                "/bin/sh",
+                "-c",
+                checkScript(),
+                timeoutSeconds = 60,
+            )
+            parseCheck(output)
+        } else {
+            null
+        }
+        val text = buildString {
+            appendLine("proot: $version")
+            if (report == null) {
+                appendLine("guest: rootfs не установлен")
+            } else if (report.probes.isEmpty()) {
+                appendLine("guest: нет ответа")
+            } else {
+                report.probes.forEach { probe ->
+                    append("${probe.name}: ${probe.status}")
+                    if (probe.detail.isNotBlank()) append(" · ${probe.detail}")
+                    appendLine()
+                }
+            }
+        }.trimEnd()
+        val broken = report != null &&
+            (report.broken || report.probes.none { it.name == "shell" && it.status == "ok" })
+        _state.update {
+            it.copy(test = text, checked = true, broken = broken)
+        }
+        text
+    }
+
+    /**
+     * Скрипт проверок для гостя. Пишется под POSIX sh, без bash-расширений.
+     * `absent` отличается от `fail`: первый значит «пакет не установлен»,
+     * второй — «файл есть, но запуск запрещён» (симптом SELinux).
+     */
+    internal fun checkScript(): String = """
+        probe() {
+          label=${'$'}1
+          shift
+          out=${'$'}("${'$'}@" 2>&1)
+          code=${'$'}?
+          out=${'$'}(printf '%s' "${'$'}out" | tr '\n' ' ' | tr -s ' ' | cut -c1-240)
+          case "${'$'}out" in
+            *"not found"*|*"No such file"*|*"not exist"*)
+              printf '%s=absent %s\n' "${'$'}label" "${'$'}out" ;;
+            *)
+              if [ "${'$'}code" -eq 0 ]; then
+                printf '%s=ok %s\n' "${'$'}label" "${'$'}out"
+              else
+                printf '%s=fail(%s) %s\n' "${'$'}label" "${'$'}code" "${'$'}out"
+              fi ;;
+          esac
+        }
+        probe shell /bin/sh -c 'echo pocket-dev'
+        probe readlink readlink /usr/bin/python3
+        probe python python3 -V
+        probe imports python3 -c 'import json,ssl,sqlite3,urllib.request,zlib,bz2,lzma'
+        probe git git --version
+    """.trimIndent() + "\n"
+
+    /** Из вывода `proot --version` берёт номер версии, а не ASCII-баннер. */
+    internal fun prootVersion(output: String): String =
+        Regex("""\b\d+\.\d+\.\d+\b""").find(output)?.value
+            ?: output.trim().lineSequence().firstOrNull().orEmpty().take(60)
+
+    /** Разбирает вывод [checkScript] в список проверок. */
+    internal fun parseCheck(output: String): CheckReport {
+        val probes = output.lineSequence()
+            .mapNotNull { line ->
+                val at = line.indexOf('=')
+                if (at <= 0) return@mapNotNull null
+                val name = line.substring(0, at).trim()
+                val rest = line.substring(at + 1).trim()
+                if (name.isEmpty() || rest.isEmpty()) return@mapNotNull null
+                val status = rest.substringBefore(' ')
+                val detail = rest.substringAfter(' ', "").trim()
+                if (status != "ok" && status != "absent" && !status.startsWith("fail")) {
+                    return@mapNotNull null
+                }
+                Probe(name, status, detail)
+            }
+            .toList()
+        return CheckReport(probes)
     }
 
     private fun run(libDir: File, vararg command: String, timeoutSeconds: Long): String {

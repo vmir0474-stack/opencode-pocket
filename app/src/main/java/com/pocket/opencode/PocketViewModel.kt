@@ -530,10 +530,18 @@ class PocketViewModel(application: Application) : AndroidViewModel(application) 
                     .put("rootfs", state.rootfs)
                     .put("freeBytes", state.freeBytes)
                     .put("error", state.error)
+                    .put("test", state.test)
+                    .put("checked", state.checked)
+                    .put("broken", state.broken)
             }
 
             "dev-install" -> {
                 viewModelScope.launch { DevEnvironment.install(app) }
+                JSONObject().put("ok", true).put("action", name)
+            }
+
+            "dev-reinstall" -> {
+                viewModelScope.launch { DevEnvironment.reinstall(app) }
                 JSONObject().put("ok", true).put("action", name)
             }
 

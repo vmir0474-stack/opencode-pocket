@@ -49,6 +49,56 @@ class DevEnvironmentTest {
     }
 
     @Test
+    fun `proot version skips the ascii banner`() {
+        val banner = " _____ _____              ___\n" +
+            "|  __ \\  __ \\_____  _____|   |_\n" +
+            "|   __/     /  _  \\/  _  \\    _|\n" +
+            "|__|  |__|__\\_____/\\_____/\\____| 5.1.0\n" +
+            "\nbuilt-in accelerators: process_vm = yes\n"
+        assertEquals("5.1.0", DevEnvironment.prootVersion(banner))
+        assertEquals("", DevEnvironment.prootVersion(""))
+    }
+
+    @Test
+    fun `check script probes python symlink imports and git`() {
+        val text = DevEnvironment.checkScript()
+        assertTrue(text.contains("probe readlink readlink /usr/bin/python3"))
+        assertTrue(text.contains("probe python python3 -V"))
+        assertTrue(text.contains("import json,ssl,sqlite3,urllib.request,zlib,bz2,lzma"))
+        assertTrue(text.contains("probe git git --version"))
+        assertTrue(text.contains("*\"not found\"*"))
+    }
+
+    @Test
+    fun `failed probe marks environment as broken`() {
+        val report = DevEnvironment.parseCheck(
+            "shell=ok pocket-dev\n" +
+                "readlink=ok python3.12\n" +
+                "python=fail(1) python3: Permission denied\n" +
+                "git=absent git: not found\n",
+        )
+        assertEquals(4, report.probes.size)
+        assertTrue(report.broken)
+        assertEquals("fail(1)", report.probes[2].status)
+        assertEquals("python3: Permission denied", report.probes[2].detail)
+        assertEquals("absent", report.probes[3].status)
+    }
+
+    @Test
+    fun `missing packages alone are not a failure`() {
+        val report = DevEnvironment.parseCheck(
+            "shell=ok pocket-dev\n" +
+                "python=absent python3: not found\n" +
+                "git=absent git: not found\n" +
+                "proot version 5.1\n",
+        )
+        assertEquals(3, report.probes.size)
+        assertFalse(report.broken)
+        assertEquals("ok", report.probes[0].status)
+        assertEquals("pocket-dev", report.probes[0].detail)
+    }
+
+    @Test
     fun `workspace falls back when external dir is unavailable`() {
         val fallback = File("/data/user/0/com.pocket.opencode/files/workspace")
         val external = File("/sdcard/OpenCode")

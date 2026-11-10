@@ -27,7 +27,7 @@ object DebugBridge {
 
     private val actions = setOf(
         "restart", "start", "stop", "reload", "skills", "mcp", "config", "prompt", "api",
-        "apps", "launch", "dev-status", "dev-install", "dev-test", "diagnostics",
+        "apps", "launch", "dev-status", "dev-install", "dev-reinstall", "dev-test", "diagnostics",
         "skill-search", "skill-install", "skill-update", "skill-remove", "skill-list",
     )
     private val pool = Executors.newCachedThreadPool { runnable ->
