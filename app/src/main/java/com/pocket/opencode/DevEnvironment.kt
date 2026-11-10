@@ -482,7 +482,11 @@ object DevEnvironment {
           esac
         }
         probe shell /bin/sh -c 'echo pocket-dev'
-        probe readlink readlink /usr/bin/python3
+        if [ -L /usr/bin/python3 ] || [ -e /usr/bin/python3 ]; then
+          probe readlink readlink -f /usr/bin/python3
+        else
+          echo "readlink=absent python3 не установлен"
+        fi
         probe python python3 -V
         probe imports python3 -c 'import json,ssl,sqlite3,urllib.request,zlib,bz2,lzma'
         probe git git --version

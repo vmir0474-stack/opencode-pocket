@@ -62,7 +62,9 @@ class DevEnvironmentTest {
     @Test
     fun `check script probes python symlink imports and git`() {
         val text = DevEnvironment.checkScript()
-        assertTrue(text.contains("probe readlink readlink /usr/bin/python3"))
+        assertTrue(text.contains("if [ -L /usr/bin/python3 ] || [ -e /usr/bin/python3 ]; then"))
+        assertTrue(text.contains("probe readlink readlink -f /usr/bin/python3"))
+        assertTrue(text.contains("readlink=absent python3 не установлен"))
         assertTrue(text.contains("probe python python3 -V"))
         assertTrue(text.contains("import json,ssl,sqlite3,urllib.request,zlib,bz2,lzma"))
         assertTrue(text.contains("probe git git --version"))
